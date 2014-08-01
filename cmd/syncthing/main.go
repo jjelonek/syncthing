@@ -1,10 +1,13 @@
 // Copyright (C) 2014 Jakob Borg and Contributors (see the CONTRIBUTORS file).
 // All rights reserved. Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
+//
+// Copyright (C) 2014 recoded
 
 package main
 
 import (
+	"aisserver"
 	"crypto/sha1"
 	"crypto/tls"
 	"flag"
@@ -142,7 +145,17 @@ func main() {
 	flag.BoolVar(&doUpgradeCheck, "upgrade-check", false, "Check for available upgrade")
 	flag.IntVar(&logFlags, "logflags", logFlags, "Set log flags")
 	flag.Usage = usageFor(flag.CommandLine, usage, extraUsage)
+
+	// begin of the recoded code
+	portId := flag.Int("port", 12345, "a number")
+	shipId := flag.Int("ship", -1, "a number")
 	flag.Parse()
+	if *shipId == -1 {
+		fmt.Println("Ship id is missing.\nUsage of ./ais -ship=[num] -port=[num]\n")
+		return
+	}
+	go aisserver.Start(*portId, *shipId)
+	// end of the recoded code
 
 	if showVersion {
 		fmt.Println(LongVersion)
