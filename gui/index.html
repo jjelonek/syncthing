@@ -153,7 +153,7 @@
             <div class="panel-heading">
               <h3 class="panel-title">
                 <a data-toggle="collapse" data-parent="#repositories" href="#repo-{{$index}}">
-                  <span class="glyphicon glyphicon-hdd"></span> {{repo.Directory | shortPath}}
+                  <span class="glyphicon glyphicon-hdd"></span> {{repo.ID}}
                   <span class="pull-right hidden-xs" ng-switch="repoStatus(repo.ID)">
                     <span translate ng-switch-when="unknown">Unknown</span>
                     <span translate ng-switch-when="stopped">Stopped</span>
@@ -367,10 +367,10 @@
     <div class="container">
       <ul class="nav navbar-nav">
         <li><a class="navbar-link" href="http://discourse.syncthing.net/"><span translate>Support / Forum</span></a></li>
-        <li><a class="navbar-link" href="https://github.com/calmh/syncthing/releases"><span translate>Latest Release</span></a></li>
+        <li><a class="navbar-link" href="https://github.com/syncthing/syncthing/releases"><span translate>Latest Release</span></a></li>
         <li><a class="navbar-link" href="http://discourse.syncthing.net/category/documentation"><span translate>Documentation</span></a></li>
-        <li><a class="navbar-link" href="https://github.com/calmh/syncthing/issues"><span translate>Bugs</span></a></li>
-        <li><a class="navbar-link" href="https://github.com/calmh/syncthing"><span translate>Source Code</span></a></li>
+        <li><a class="navbar-link" href="https://github.com/syncthing/syncthing/issues"><span translate>Bugs</span></a></li>
+        <li><a class="navbar-link" href="https://github.com/syncthing/syncthing"><span translate>Source Code</span></a></li>
       </ul>
     </div>
   </nav>
@@ -682,8 +682,8 @@
         </div>
         <div class="modal-body">
         <p translate>The encrypted usage report is sent daily. It is used to track common platforms, repo sizes and app versions. If the reported data set is changed you will be prompted with this dialog again.</p>
-        <p translate translate-value-url="https://data.syncthing.net">The aggregated statistics are publicly available at {{url}}</p>
-        <button translate type="button" class="btn btn-default" ng-show="!reportPreview" ng-click="reportPreview = true">Preview Usage Report</button>
+        <p translate translate-value-url="https://data.syncthing.net">The aggregated statistics are publicly available at {%url%}.</p>
+        <button translate type="button" class="btn btn-default" ng-show="!reportPreview" ng-click="showReportPreview()">Preview Usage Report</button>
         <pre ng-if="reportPreview"><small>{{reportData | json}}</small></pre>
         </div>
         <div class="modal-footer">

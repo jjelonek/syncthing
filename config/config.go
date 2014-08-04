@@ -15,14 +15,14 @@ import (
 	"strconv"
 
 	"code.google.com/p/go.crypto/bcrypt"
-	"github.com/calmh/syncthing/logger"
-	"github.com/calmh/syncthing/protocol"
+	"github.com/syncthing/syncthing/logger"
+	"github.com/syncthing/syncthing/protocol"
 )
 
 var l = logger.DefaultLogger
 
 type Configuration struct {
-	Version      int                       `xml:"version,attr" default:"2"`
+	Version      int                       `xml:"version,attr" default:"3"`
 	Repositories []RepositoryConfiguration `xml:"repository"`
 	Nodes        []NodeConfiguration       `xml:"node"`
 	GUI          GUIConfiguration          `xml:"gui"`
@@ -296,6 +296,11 @@ func Load(rd io.Reader, myID protocol.NodeID) (Configuration, error) {
 		convertV1V2(&cfg)
 	}
 
+	// Upgrade to v3 configuration if appropriate
+	if cfg.Version == 2 {
+		convertV2V3(&cfg)
+	}
+
 	// Hash old cleartext passwords
 	if len(cfg.GUI.Password) > 0 && cfg.GUI.Password[0] != '$' {
 		hash, err := bcrypt.GenerateFromPassword([]byte(cfg.GUI.Password), 0)
@@ -333,13 +338,24 @@ func Load(rd io.Reader, myID protocol.NodeID) (Configuration, error) {
 		}
 	}
 
+	return cfg, err
+}
+
+func convertV2V3(cfg *Configuration) {
+	// In previous versions, compression was always on. When upgrading, enable
+	// compression on all existing new. New nodes will get compression on by
+	// default by the GUI.
+	for i := range cfg.Nodes {
+		cfg.Nodes[i].Compression = true
+	}
+
 	// The global discovery format and port number changed in v0.9. Having the
 	// default announce server but old port number is guaranteed to be legacy.
 	if cfg.Options.GlobalAnnServer == "announce.syncthing.net:22025" {
 		cfg.Options.GlobalAnnServer = "announce.syncthing.net:22026"
 	}
 
-	return cfg, err
+	cfg.Version = 3
 }
 
 func convertV1V2(cfg *Configuration) {

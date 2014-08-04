@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/calmh/syncthing/osutil"
+	"github.com/syncthing/syncthing/osutil"
 )
 
 var csrfTokens []string
@@ -39,6 +39,12 @@ func csrfMiddleware(prefix string, next http.Handler) http.Handler {
 				}
 				http.SetCookie(w, cookie)
 			}
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if r.Method == "GET" {
+			// Allow GET requests unconditionally
 			next.ServeHTTP(w, r)
 			return
 		}

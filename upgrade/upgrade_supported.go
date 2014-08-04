@@ -32,7 +32,13 @@ func UpgradeTo(rel Release) error {
 		return err
 	}
 
-	expectedRelease := fmt.Sprintf("syncthing-%s-%s%s-%s.", runtime.GOOS, runtime.GOARCH, GoArchExtra, rel.Tag)
+	osName := runtime.GOOS
+	if osName == "darwin" {
+		// We call the darwin release bundles macosx because that makes more
+		// sense for people downloading them
+		osName = "macosx"
+	}
+	expectedRelease := fmt.Sprintf("syncthing-%s-%s%s-%s.", osName, runtime.GOARCH, GoArchExtra, rel.Tag)
 	for _, asset := range rel.Assets {
 		if strings.HasPrefix(asset.Name, expectedRelease) {
 			if strings.HasSuffix(asset.Name, ".tar.gz") {
@@ -60,7 +66,7 @@ func UpgradeTo(rel Release) error {
 
 // Returns the latest release, including prereleases or not depending on the argument
 func LatestRelease(prerelease bool) (Release, error) {
-	resp, err := http.Get("https://api.github.com/repos/calmh/syncthing/releases?per_page=10")
+	resp, err := http.Get("https://api.github.com/repos/syncthing/syncthing/releases?per_page=10")
 	if err != nil {
 		return Release{}, err
 	}

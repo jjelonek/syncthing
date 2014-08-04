@@ -47,7 +47,7 @@ test-cov() {
 test() {
 	check
 	go vet ./...
-	godep go test -cpu=1,2,4 ./...
+	godep go test -cpu=1,2,4 $* ./...
 }
 
 sign() {
@@ -133,7 +133,7 @@ case "$1" in
 		;;
 
 	test)
-		test
+		test -short
 		;;
 
 	test-cov)
@@ -142,28 +142,28 @@ case "$1" in
 
 	tar)
 		rm -f *.tar.gz *.zip
-		test || exit 1
+		test -short || exit 1
 		assets
 		build
 
 		eval $(go env)
-		name="syncthing-$GOOS-$GOARCH-$version"
+		name="syncthing-${GOOS/darwin/macosx}-$GOARCH-$version"
 
 		tarDist "$name"
 		;;
 
 	all)
 		rm -f *.tar.gz *.zip
-		test || exit 1
+		test -short || exit 1
 		assets
 
-		for os in darwin-amd64 linux-386 linux-amd64 freebsd-amd64 windows-amd64 windows-386 solaris-amd64 ; do
+		for os in darwin-amd64 freebsd-amd64 freebsd-386 linux-amd64 linux-386 windows-amd64 windows-386 solaris-amd64 ; do
 			export GOOS=${os%-*}
 			export GOARCH=${os#*-}
 
 			build
 
-			name="syncthing-$os-$version"
+			name="syncthing-${os/darwin/macosx}-$version"
 			case $GOOS in
 				windows)
 					zipDist "$name"
@@ -202,7 +202,7 @@ case "$1" in
 		tag=$(git describe)
 		shopt -s nullglob
 		for f in *.tar.gz *.zip *.asc ; do
-			relup calmh/syncthing "$tag" "$f"
+			relup syncthing/syncthing "$tag" "$f"
 		done
 		;;
 
