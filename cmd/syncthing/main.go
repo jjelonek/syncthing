@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"httpserver"
 	"io"
 	"log"
 	"math/rand"
@@ -40,6 +41,8 @@ import (
 	"github.com/syncthing/syncthing/upgrade"
 	"github.com/syncthing/syncthing/upnp"
 	"github.com/syndtr/goleveldb/leveldb"
+
+	//"bitbucket.org/kardianos/osext"
 )
 
 var (
@@ -149,14 +152,34 @@ func main() {
 	flag.Usage = usageFor(flag.CommandLine, usage, extraUsage)
 
 	// begin of the recoded code
-	portId := flag.Int("port", 12345, "a number")
-	shipId := flag.Int("ship", -1, "a number")
+	//confDir, _ = osext.ExecutableFolder()
+	fmt.Printf("Executable dir: %q", confDir)
+	var portId, shipId int
+	var srcDir string
+	var shipMode bool
+	flag.IntVar(&portId, "port", 12345, "server port")
+	flag.IntVar(&shipId, "ship", -1, "ship id - a number [0..999]")
+	flag.StringVar(&srcDir, "dir", "", "full path to sync folders ship_[nnn], where nnn - ship id")
 	flag.Parse()
-	if *shipId == -1 {
-		fmt.Println("Ship id is missing.\nUsage of ./ais -ship=[num] -port=[num]\n")
-		return
+	if shipId == -1 {
+		shipMode = false
+		if srcDir == "" {
+			fmt.Println("-dir parameter (a full path to sync folders) is requred in server mode")
+			return
+		}
+	} else {
+		shipMode = true
+		if shipId < 0 {
+			fmt.Println("-ship parameter must be assigned to a positive integer")
+			return
+		}
 	}
-	go aisserver.Start(*portId, *shipId)
+	if shipMode {
+		go aisserver.Start(portId, shipId)
+	} else {
+		go httpserver.Start(portId, srcDir)
+		//go filereader.Start(srcDir)
+	}
 	// end of the recoded code
 
 	if showVersion {
