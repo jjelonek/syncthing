@@ -41,8 +41,6 @@ import (
 	"github.com/syncthing/syncthing/upgrade"
 	"github.com/syncthing/syncthing/upnp"
 	"github.com/syndtr/goleveldb/leveldb"
-
-	//"bitbucket.org/kardianos/osext"
 )
 
 var (
@@ -152,20 +150,21 @@ func main() {
 	flag.Usage = usageFor(flag.CommandLine, usage, extraUsage)
 
 	// begin of the recoded code
-	//confDir, _ = osext.ExecutableFolder()
-	fmt.Printf("Executable dir: %q", confDir)
 	var portId, shipId int
 	var srcDir string
 	var shipMode bool
 	flag.IntVar(&portId, "port", 12345, "server port")
 	flag.IntVar(&shipId, "ship", -1, "ship id - a number [0..999]")
-	flag.StringVar(&srcDir, "dir", "", "full path to sync folders ship_[nnn], where nnn - ship id")
+	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
 	flag.Parse()
 	if shipId == -1 {
 		shipMode = false
 		if srcDir == "" {
-			fmt.Println("-dir parameter (a full path to sync folders) is requred in server mode")
+			fmt.Println("-dir parameter (a path to sync folders) is requred in server mode")
 			return
+		} else {
+			srcDir, _ = filepath.Abs(srcDir)
+			confDir = srcDir + httpserver.SyncConfigDir
 		}
 	} else {
 		shipMode = true
