@@ -150,22 +150,24 @@ func main() {
 	flag.Usage = usageFor(flag.CommandLine, usage, extraUsage)
 
 	// begin of the recoded code
-	var portId, shipId int
-	var srcDir string
+	var portInId, portOutId, shipId int
+	var srcDir, serverAddress string
 	var shipMode bool
-	flag.IntVar(&portId, "port", 12345, "server port")
+	flag.IntVar(&portInId, "port_in", 12344, "local server port")
+	flag.IntVar(&portOutId, "port_out", 12345, "remote server port")
+	flag.StringVar(&serverAddress, "server", "", "remote server address")
 	flag.IntVar(&shipId, "ship", -1, "ship id - a number [0..999]")
 	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
 	flag.Parse()
+	if srcDir == "" {
+		fmt.Println("-dir parameter (a path to sync folders) is required")
+		os.Exit(0)
+	} else {
+		srcDir, _ = filepath.Abs(srcDir)
+		confDir = srcDir + httpserver.SyncConfigDir
+	}
 	if shipId == -1 {
 		shipMode = false
-		if srcDir == "" {
-			fmt.Println("-dir parameter (a path to sync folders) is requred in server mode")
-			return
-		} else {
-			srcDir, _ = filepath.Abs(srcDir)
-			confDir = srcDir + httpserver.SyncConfigDir
-		}
 	} else {
 		shipMode = true
 		if shipId < 0 {
@@ -173,11 +175,14 @@ func main() {
 			return
 		}
 	}
+	if serverAddress == "" {
+		fmt.Println("-server parameter is required")
+		os.Exit(0)
+	}
 	if shipMode {
-		go aisserver.Start(portId, shipId)
+		go aisserver.Start(serverAddress, portOutId, portInId, srcDir, shipId)
 	} else {
-		go httpserver.Start(portId, srcDir)
-		//go filereader.Start(srcDir)
+		go httpserver.Start(serverAddress, portOutId, portInId, srcDir)
 	}
 	// end of the recoded code
 
