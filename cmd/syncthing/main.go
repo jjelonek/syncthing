@@ -153,11 +153,14 @@ func main() {
 	var portInId, portOutId, shipId int
 	var srcDir, serverAddress string
 	var shipMode bool
+	var serverToken string
 	flag.IntVar(&portInId, "port_in", 12344, "local server port")
 	flag.IntVar(&portOutId, "port_out", 12345, "remote server port")
-	flag.StringVar(&serverAddress, "server", "", "remote server address")
+	flag.StringVar(&serverAddress, "server", "0.0.0.0", "remote server address")
 	flag.IntVar(&shipId, "ship", -1, "ship id - a number [0..999]")
+	flag.IntVar(&aisserver.LogInterval, "log", 5, "log interval in minutes")
 	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
+	flag.StringVar(&serverToken, "token", "123456789", "remote server token")
 	flag.Parse()
 	if srcDir == "" {
 		fmt.Println("-dir parameter (a path to sync folders) is required")
@@ -182,7 +185,7 @@ func main() {
 	if shipMode {
 		go aisserver.Start(serverAddress, portOutId, portInId, srcDir, shipId)
 	} else {
-		go httpserver.Start(serverAddress, portOutId, portInId, srcDir)
+		go httpserver.Start(serverAddress, portOutId, portInId, srcDir, serverToken)
 	}
 	// end of the recoded code
 
