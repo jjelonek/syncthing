@@ -152,13 +152,14 @@ func main() {
 	// begin of the recoded code
 	var portInId, portOutId, shipId int
 	var srcDir, serverAddress string
-	var shipMode bool
+	var shipMode, startGui bool
 	var serverToken string
 	flag.IntVar(&portInId, "port_in", 12344, "local server port")
 	flag.IntVar(&portOutId, "port_out", 12345, "remote server port")
 	flag.StringVar(&serverAddress, "server", "0.0.0.0", "remote server address")
 	flag.IntVar(&shipId, "ship", -1, "ship id - a number [0..999]")
 	flag.IntVar(&aisserver.LogInterval, "log", 5, "log interval in minutes")
+	flag.BoolVar(&startGui, "gui", false, "flag for browser GUI interface")
 	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
 	flag.StringVar(&serverToken, "token", "123456789", "remote server token")
 	flag.Parse()
@@ -183,9 +184,9 @@ func main() {
 		os.Exit(0)
 	}
 	if shipMode {
-		go aisserver.Start(serverAddress, portOutId, portInId, srcDir, shipId)
+		go aisserver.Start(serverAddress, portOutId, portInId, srcDir, shipId, startGui)
 	} else {
-		go httpserver.Start(serverAddress, portOutId, portInId, srcDir, serverToken)
+		go httpserver.Start(serverAddress, portOutId, portInId, srcDir, serverToken, startGui)
 	}
 	// end of the recoded code
 
@@ -347,6 +348,9 @@ func main() {
 		l.FatalErr(err)
 		cfg.Options.ListenAddress = []string{fmt.Sprintf("0.0.0.0:%d", port)}
 
+		// begin of the recoded code
+		cfg.Options.StartBrowser = startGui
+		// end of the recoded code
 		saveConfig()
 		l.Infof("Edit %s to taste or use the GUI\n", cfgFile)
 	}
