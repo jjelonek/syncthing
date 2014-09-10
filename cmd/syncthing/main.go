@@ -203,6 +203,7 @@ func main() {
 	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
 	flag.StringVar(&serverToken, "token", "123456789", "remote server token")
 	flag.Parse()
+	noBrowser = !startGui
 	if srcDir == "" {
 		fmt.Println("-dir parameter (a path to sync folders) is required")
 		os.Exit(0)
@@ -402,9 +403,9 @@ func syncthingMain() {
 		l.FatalErr(err)
 		cfg.Options.ListenAddress = []string{fmt.Sprintf("0.0.0.0:%d", port)}
 
-		// begin of the recoded code
+		/* begin of the recoded code
 		cfg.Options.StartBrowser = startGui
-		// end of the recoded code
+		// end of the recoded code */
 		cfg.Save()
 
 		l.Infof("Edit %s to taste or use the GUI\n", cfgFile)
