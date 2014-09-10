@@ -2,11 +2,32 @@
 // All rights reserved. Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+/*
+__        __               _             _
+\ \      / /_ _ _ __ _ __ (_)_ __   __ _| |
+ \ \ /\ / / _` | '__| '_ \| | '_ \ / _` | |
+  \ V  V / (_| | |  | | | | | | | | (_| |_|
+   \_/\_/ \__,_|_|  |_| |_|_|_| |_|\__, (_)
+                                   |___/
+
+The code in this file is a piece of crap. Don't base anything on it.
+Refactorin ongoing in new-puller branch.
+
+__        __               _             _
+\ \      / /_ _ _ __ _ __ (_)_ __   __ _| |
+ \ \ /\ / / _` | '__| '_ \| | '_ \ / _` | |
+  \ V  V / (_| | |  | | | | | | | | (_| |_|
+   \_/\_/ \__,_|_|  |_| |_|_|_| |_|\__, (_)
+                                   |___/
+*/
+
 package model
 
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -72,6 +93,7 @@ type puller struct {
 	blocks            chan bqBlock
 	requestResults    chan requestResult
 	versioner         versioner.Versioner
+	errors            int
 }
 
 func newPuller(repoCfg config.RepositoryConfiguration, model *Model, slots int, cfg *config.Configuration) *puller {
@@ -92,7 +114,7 @@ func newPuller(repoCfg config.RepositoryConfiguration, model *Model, slots int, 
 		if !ok {
 			l.Fatalf("Requested versioning type %q that does not exist", repoCfg.Versioning.Type)
 		}
-		p.versioner = factory(repoCfg.Versioning.Params)
+		p.versioner = factory(repoCfg.ID, repoCfg.Directory, repoCfg.Versioning.Params)
 	}
 
 	if slots > 0 {
@@ -113,7 +135,7 @@ func newPuller(repoCfg config.RepositoryConfiguration, model *Model, slots int, 
 
 func (p *puller) run() {
 	changed := true
-	scanintv := time.Duration(p.cfg.Options.RescanIntervalS) * time.Second
+	scanintv := time.Duration(p.repoCfg.RescanIntervalS) * time.Second
 	lastscan := time.Now()
 	var prevVer uint64
 	var queued int
@@ -124,10 +146,14 @@ func (p *puller) run() {
 	}
 
 	for {
-		// Run the pulling loop as long as there are blocks to fetch
+		if sc, sl := cap(p.requestSlots), len(p.requestSlots); sl != sc {
+			panic(fmt.Sprintf("Incorrect number of slots; %d != %d", sl, sc))
+		}
 
+		// Run the pulling loop as long as there are blocks to fetch
 		prevVer, queued = p.queueNeededBlocks(prevVer)
 		if queued > 0 {
+			p.errors = 0
 
 		pull:
 			for {
@@ -145,6 +171,12 @@ func (p *puller) run() {
 						if debug {
 							l.Debugf("%q: pulling loop needs more blocks", p.repoCfg.ID)
 						}
+
+						if p.errors > 0 && p.errors >= queued {
+							p.requestSlots <- true
+							break pull
+						}
+
 						prevVer, _ = p.queueNeededBlocks(prevVer)
 						b, ok = p.bq.get()
 					}
@@ -154,6 +186,7 @@ func (p *puller) run() {
 						if debug {
 							l.Debugf("%q: pulling loop done", p.repoCfg.ID)
 						}
+						p.requestSlots <- true
 						break pull
 					}
 
@@ -179,11 +212,17 @@ func (p *puller) run() {
 					}
 				}
 			}
+
+			if p.errors > 0 && p.errors >= queued {
+				l.Warnf("All remaining files failed to sync. Stopping repo %q.", p.repoCfg.ID)
+				invalidateRepo(p.cfg, p.repoCfg.ID, errors.New("too many errors, check logs"))
+				return
+			}
 		}
 
 		if changed {
 			p.model.setState(p.repoCfg.ID, RepoCleaning)
-			p.fixupDirectories()
+			p.clean()
 			changed = false
 		}
 
@@ -208,7 +247,7 @@ func (p *puller) run() {
 }
 
 func (p *puller) runRO() {
-	walkTicker := time.Tick(time.Duration(p.cfg.Options.RescanIntervalS) * time.Second)
+	walkTicker := time.Tick(time.Duration(p.repoCfg.RescanIntervalS) * time.Second)
 
 	for _ = range walkTicker {
 		if debug {
@@ -222,13 +261,19 @@ func (p *puller) runRO() {
 	}
 }
 
-func (p *puller) fixupDirectories() {
+// clean deletes orphaned temporary files and directories that should no
+// longer exist.
+func (p *puller) clean() {
 	var deleteDirs []string
 	var changed = 0
 
 	var walkFn = func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		if info.Mode().IsRegular() && defTempNamer.IsTemporary(path) {
+			os.Remove(path)
 		}
 
 		if !info.IsDir() {
@@ -365,7 +410,8 @@ func (p *puller) handleBlock(b bqBlock) bool {
 				}
 				err = os.MkdirAll(path, os.FileMode(f.Flags&0777))
 				if err != nil {
-					l.Warnf("Create folder: %q: %v", path, err)
+					p.errors++
+					l.Infof("mkdir: error: %q: %v", path, err)
 				}
 			}
 		} else if debug {
@@ -384,13 +430,13 @@ func (p *puller) handleBlock(b bqBlock) bool {
 		fp := filepath.Join(p.repoCfg.Directory, f.Name)
 		t := time.Unix(f.Modified, 0)
 		err := os.Chtimes(fp, t, t)
-		if debug && err != nil {
-			l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+		if err != nil {
+			l.Infof("chtimes: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
 		}
 		if !p.repoCfg.IgnorePerms && protocol.HasPermissionBits(f.Flags) {
 			err = os.Chmod(fp, os.FileMode(f.Flags&0777))
-			if debug && err != nil {
-				l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+			if err != nil {
+				l.Infof("chmod: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
 			}
 		}
 
@@ -421,19 +467,28 @@ func (p *puller) handleBlock(b bqBlock) bool {
 		of.temp = filepath.Join(p.repoCfg.Directory, defTempNamer.TempName(f.Name))
 
 		dirName := filepath.Dir(of.filepath)
-		_, err := os.Stat(dirName)
+		info, err := os.Stat(dirName)
 		if err != nil {
 			err = os.MkdirAll(dirName, 0777)
-		}
-		if err != nil {
-			l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+			if debug && err != nil {
+				l.Debugf("mkdir: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+			}
+		} else {
+			// We need to make sure the directory is writeable so we can create files in it
+			if dirName != p.repoCfg.Directory {
+				err = os.Chmod(dirName, 0777)
+				if debug && err != nil {
+					l.Debugf("make writeable: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+				}
+			}
+			// Change it back after creating the file, to minimize the time window with incorrect permissions
+			defer os.Chmod(dirName, info.Mode())
 		}
 
 		of.file, of.err = os.Create(of.temp)
 		if of.err != nil {
-			if debug {
-				l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, of.err)
-			}
+			p.errors++
+			l.Infof("create: error: %q / %q: %v", p.repoCfg.ID, f.Name, of.err)
 			if !b.last {
 				p.openFiles[f.Name] = of
 			}
@@ -482,9 +537,8 @@ func (p *puller) handleCopyBlock(b bqBlock) {
 	var exfd *os.File
 	exfd, of.err = os.Open(of.filepath)
 	if of.err != nil {
-		if debug {
-			l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, of.err)
-		}
+		p.errors++
+		l.Infof("open: error: %q / %q: %v", p.repoCfg.ID, f.Name, of.err)
 		of.file.Close()
 		of.file = nil
 
@@ -500,9 +554,8 @@ func (p *puller) handleCopyBlock(b bqBlock) {
 			_, of.err = of.file.WriteAt(bs, b.Offset)
 		}
 		if of.err != nil {
-			if debug {
-				l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, of.err)
-			}
+			p.errors++
+			l.Infof("write: error: %q / %q: %v", p.repoCfg.ID, f.Name, of.err)
 			exfd.Close()
 			of.file.Close()
 			of.file = nil
@@ -585,12 +638,30 @@ func (p *puller) handleEmptyBlock(b bqBlock) {
 			l.Debugf("pull: delete %q", f.Name)
 		}
 		os.Remove(of.temp)
-		os.Chmod(of.filepath, 0666)
+
+		// Ensure the file and the directory it is in is writeable so we can remove the file
+		dirName := filepath.Dir(of.filepath)
+		err := os.Chmod(of.filepath, 0666)
+		if debug && err != nil {
+			l.Debugf("make writeable: error: %q: %v", of.filepath, err)
+		}
+		if dirName != p.repoCfg.Directory {
+			info, err := os.Stat(dirName)
+			if err != nil {
+				l.Debugln("weird! can't happen?", err)
+			}
+			err = os.Chmod(dirName, 0777)
+			if debug && err != nil {
+				l.Debugf("make writeable: error: %q: %v", dirName, err)
+			}
+			// Change it back after deleting the file, to minimize the time window with incorrect permissions
+			defer os.Chmod(dirName, info.Mode())
+		}
 		if p.versioner != nil {
 			if debug {
 				l.Debugln("pull: deleting with versioner")
 			}
-			if err := p.versioner.Archive(p.repoCfg.Directory, of.filepath); err == nil {
+			if err := p.versioner.Archive(of.filepath); err == nil {
 				p.model.updateLocal(p.repoCfg.ID, f)
 			} else if debug {
 				l.Debugln("pull: error:", err)
@@ -630,10 +701,17 @@ func (p *puller) queueNeededBlocks(prevVer uint64) (uint64, int) {
 	}
 
 	queued := 0
+	files := make([]protocol.FileInfo, 0, indexBatchSize)
 	for _, f := range p.model.NeedFilesRepo(p.repoCfg.ID) {
 		if _, ok := p.openFiles[f.Name]; ok {
 			continue
 		}
+		files = append(files, f)
+	}
+
+	perm := rand.Perm(len(files))
+	for _, idx := range perm {
+		f := files[idx]
 		lf := p.model.CurrentRepoFile(p.repoCfg.ID, f.Name)
 		have, need := scanner.BlockDiff(lf.Blocks, f.Blocks)
 		if debug {
@@ -646,6 +724,7 @@ func (p *puller) queueNeededBlocks(prevVer uint64) (uint64, int) {
 			need: need,
 		})
 	}
+
 	if debug && queued > 0 {
 		l.Debugf("%q: queued %d items", p.repoCfg.ID, queued)
 	}
@@ -663,19 +742,22 @@ func (p *puller) closeFile(f protocol.FileInfo) {
 	}
 
 	of := p.openFiles[f.Name]
-	of.file.Close()
+	err := of.file.Close()
+	if err != nil {
+		p.errors++
+		l.Infof("close: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+	}
 	defer os.Remove(of.temp)
 
 	delete(p.openFiles, f.Name)
 
 	fd, err := os.Open(of.temp)
 	if err != nil {
-		if debug {
-			l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
-		}
+		p.errors++
+		l.Infof("open: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
 		return
 	}
-	hb, _ := scanner.Blocks(fd, scanner.StandardBlockSize)
+	hb, _ := scanner.Blocks(fd, scanner.StandardBlockSize, f.Size())
 	fd.Close()
 
 	if l0, l1 := len(hb), len(f.Blocks); l0 != l1 {
@@ -687,27 +769,29 @@ func (p *puller) closeFile(f protocol.FileInfo) {
 
 	for i := range hb {
 		if bytes.Compare(hb[i].Hash, f.Blocks[i].Hash) != 0 {
-			l.Debugf("pull: %q / %q: block %d hash mismatch\n\thave: %x\n\twant: %x", p.repoCfg.ID, f.Name, i, hb[i].Hash, f.Blocks[i].Hash)
+			if debug {
+				l.Debugf("pull: %q / %q: block %d hash mismatch\n  have: %x\n  want: %x", p.repoCfg.ID, f.Name, i, hb[i].Hash, f.Blocks[i].Hash)
+			}
 			return
 		}
 	}
 
 	t := time.Unix(f.Modified, 0)
 	err = os.Chtimes(of.temp, t, t)
-	if debug && err != nil {
-		l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+	if err != nil {
+		l.Infof("chtimes: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
 	}
 	if !p.repoCfg.IgnorePerms && protocol.HasPermissionBits(f.Flags) {
 		err = os.Chmod(of.temp, os.FileMode(f.Flags&0777))
-		if debug && err != nil {
-			l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+		if err != nil {
+			l.Infof("chmod: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
 		}
 	}
 
 	osutil.ShowFile(of.temp)
 
 	if p.versioner != nil {
-		err := p.versioner.Archive(p.repoCfg.Directory, of.filepath)
+		err := p.versioner.Archive(of.filepath)
 		if err != nil {
 			if debug {
 				l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
@@ -722,7 +806,8 @@ func (p *puller) closeFile(f protocol.FileInfo) {
 	if err := osutil.Rename(of.temp, of.filepath); err == nil {
 		p.model.updateLocal(p.repoCfg.ID, f)
 	} else {
-		l.Debugf("pull: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
+		p.errors++
+		l.Infof("rename: error: %q / %q: %v", p.repoCfg.ID, f.Name, err)
 	}
 }
 

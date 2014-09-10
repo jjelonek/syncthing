@@ -9,8 +9,8 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/base64"
 	"flag"
-	"fmt"
 	"go/format"
 	"io"
 	"os"
@@ -23,27 +23,27 @@ var tpl = template.Must(template.New("assets").Parse(`package auto
 import (
 	"bytes"
 	"compress/gzip"
-	"encoding/hex"
+	"encoding/base64"
 	"io/ioutil"
 )
 
-var Assets = make(map[string][]byte)
-
-func init() {
+func Assets() map[string][]byte {
+	var assets = make(map[string][]byte, {{.assets | len}})
 	var bs []byte
 	var gr *gzip.Reader
 {{range $asset := .assets}}
-	bs, _ = hex.DecodeString("{{$asset.HexData}}")
+	bs, _ = base64.StdEncoding.DecodeString("{{$asset.Data}}")
 	gr, _ = gzip.NewReader(bytes.NewBuffer(bs))
 	bs, _ = ioutil.ReadAll(gr)
-	Assets["{{$asset.Name}}"] = bs
+	assets["{{$asset.Name}}"] = bs
 {{end}}
+	return assets
 }
 `))
 
 type asset struct {
-	Name    string
-	HexData string
+	Name string
+	Data string
 }
 
 var assets []asset
@@ -69,8 +69,8 @@ func walkerFor(basePath string) filepath.WalkFunc {
 
 			name, _ = filepath.Rel(basePath, name)
 			assets = append(assets, asset{
-				Name:    filepath.ToSlash(name),
-				HexData: fmt.Sprintf("%x", buf.Bytes()),
+				Name: filepath.ToSlash(name),
+				Data: base64.StdEncoding.EncodeToString(buf.Bytes()),
 			})
 		}
 

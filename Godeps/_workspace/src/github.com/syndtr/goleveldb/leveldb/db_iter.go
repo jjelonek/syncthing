@@ -9,6 +9,8 @@ package leveldb
 import (
 	"errors"
 	"runtime"
+	"sync"
+	"sync/atomic"
 
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -19,6 +21,17 @@ var (
 	errInvalidIkey = errors.New("leveldb: Iterator: invalid internal key")
 )
 
+type memdbReleaser struct {
+	once sync.Once
+	m    *memDB
+}
+
+func (mr *memdbReleaser) Release() {
+	mr.once.Do(func() {
+		mr.m.decref()
+	})
+}
+
 func (db *DB) newRawIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
 	em, fm := db.getMems()
 	v := db.s.version()
@@ -26,9 +39,13 @@ func (db *DB) newRawIterator(slice *util.Range, ro *opt.ReadOptions) iterator.It
 	ti := v.getIterators(slice, ro)
 	n := len(ti) + 2
 	i := make([]iterator.Iterator, 0, n)
-	i = append(i, em.NewIterator(slice))
+	emi := em.mdb.NewIterator(slice)
+	emi.SetReleaser(&memdbReleaser{m: em})
+	i = append(i, emi)
 	if fm != nil {
-		i = append(i, fm.NewIterator(slice))
+		fmi := fm.mdb.NewIterator(slice)
+		fmi.SetReleaser(&memdbReleaser{m: fm})
+		i = append(i, fmi)
 	}
 	i = append(i, ti...)
 	strict := db.s.o.GetStrict(opt.StrictIterator) || ro.GetStrict(opt.StrictIterator)
@@ -50,6 +67,7 @@ func (db *DB) newIterator(seq uint64, slice *util.Range, ro *opt.ReadOptions) *d
 	}
 	rawIter := db.newRawIterator(islice, ro)
 	iter := &dbIter{
+		db:     db,
 		icmp:   db.s.icmp,
 		iter:   rawIter,
 		seq:    seq,
@@ -57,6 +75,7 @@ func (db *DB) newIterator(seq uint64, slice *util.Range, ro *opt.ReadOptions) *d
 		key:    make([]byte, 0),
 		value:  make([]byte, 0),
 	}
+	atomic.AddInt32(&db.aliveIters, 1)
 	runtime.SetFinalizer(iter, (*dbIter).Release)
 	return iter
 }
@@ -73,6 +92,7 @@ const (
 
 // dbIter represent an interator states over a database session.
 type dbIter struct {
+	db     *DB
 	icmp   *iComparer
 	iter   iterator.Iterator
 	seq    uint64
@@ -287,6 +307,7 @@ func (i *dbIter) Release() {
 
 		if i.releaser != nil {
 			i.releaser.Release()
+			i.releaser = nil
 		}
 
 		i.dir = dirReleased
@@ -294,6 +315,8 @@ func (i *dbIter) Release() {
 		i.value = nil
 		i.iter.Release()
 		i.iter = nil
+		atomic.AddInt32(&i.db.aliveIters, -1)
+		i.db = nil
 	}
 }
 

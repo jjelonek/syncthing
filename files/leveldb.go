@@ -1,7 +1,12 @@
+// Copyright (C) 2014 Jakob Borg and Contributors (see the CONTRIBUTORS file).
+// All rights reserved. Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package files
 
 import (
 	"bytes"
+	"runtime"
 	"sort"
 	"sync"
 
@@ -116,11 +121,19 @@ func globalKeyName(key []byte) []byte {
 	return key[1+64:]
 }
 
+func globalKeyRepo(key []byte) []byte {
+	repo := key[1 : 1+64]
+	izero := bytes.IndexByte(repo, 0)
+	return repo[:izero]
+}
+
 type deletionHandler func(db dbReader, batch dbWriter, repo, node, name []byte, dbi iterator.Iterator) uint64
 
-type fileIterator func(f protocol.FileInfo) bool
+type fileIterator func(f protocol.FileIntf) bool
 
 func ldbGenericReplace(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo, deleteFn deletionHandler) uint64 {
+	defer runtime.GC()
+
 	sort.Sort(fileList(fs)) // sort list on name, same as on disk
 
 	start := nodeKey(repo, node, nil)                            // before all repo/node files
@@ -173,18 +186,28 @@ func ldbGenericReplace(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo
 			if lv := ldbInsert(batch, repo, node, newName, fs[fsi]); lv > maxLocalVer {
 				maxLocalVer = lv
 			}
-			ldbUpdateGlobal(snap, batch, repo, node, newName, fs[fsi].Version)
+			if fs[fsi].IsInvalid() {
+				ldbRemoveFromGlobal(snap, batch, repo, node, newName)
+			} else {
+				ldbUpdateGlobal(snap, batch, repo, node, newName, fs[fsi].Version)
+			}
 			fsi++
 
 		case moreFs && moreDb && cmp == 0:
-			// File exists on both sides - compare versions.
-			var ef protocol.FileInfo
+			// File exists on both sides - compare versions. We might get an
+			// update with the same version and different flags if a node has
+			// marked a file as invalid, so handle that too.
+			var ef protocol.FileInfoTruncated
 			ef.UnmarshalXDR(dbi.Value())
-			if fs[fsi].Version > ef.Version {
+			if fs[fsi].Version > ef.Version || fs[fsi].Version != ef.Version {
 				if lv := ldbInsert(batch, repo, node, newName, fs[fsi]); lv > maxLocalVer {
 					maxLocalVer = lv
 				}
-				ldbUpdateGlobal(snap, batch, repo, node, newName, fs[fsi].Version)
+				if fs[fsi].IsInvalid() {
+					ldbRemoveFromGlobal(snap, batch, repo, node, newName)
+				} else {
+					ldbUpdateGlobal(snap, batch, repo, node, newName, fs[fsi].Version)
+				}
 			}
 			// Iterate both sides.
 			fsi++
@@ -223,20 +246,23 @@ func ldbReplace(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo) uint6
 
 func ldbReplaceWithDelete(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo) uint64 {
 	return ldbGenericReplace(db, repo, node, fs, func(db dbReader, batch dbWriter, repo, node, name []byte, dbi iterator.Iterator) uint64 {
-		var f protocol.FileInfo
-		err := f.UnmarshalXDR(dbi.Value())
+		var tf protocol.FileInfoTruncated
+		err := tf.UnmarshalXDR(dbi.Value())
 		if err != nil {
 			panic(err)
 		}
-		if !protocol.IsDeleted(f.Flags) {
+		if !tf.IsDeleted() {
 			if debug {
 				l.Debugf("mark deleted; repo=%q node=%v name=%q", repo, protocol.NodeIDFromBytes(node), name)
 			}
-			ts := clock(f.LocalVersion)
-			f.Blocks = nil
-			f.Version = lamport.Default.Tick(f.Version)
-			f.Flags |= protocol.FlagDeleted
-			f.LocalVersion = ts
+			ts := clock(tf.LocalVersion)
+			f := protocol.FileInfo{
+				Name:         tf.Name,
+				Version:      lamport.Default.Tick(tf.Version),
+				LocalVersion: ts,
+				Flags:        tf.Flags | protocol.FlagDeleted,
+				Modified:     tf.Modified,
+			}
 			batch.Put(dbi.Key(), f.MarshalXDR())
 			ldbUpdateGlobal(db, batch, repo, node, nodeKeyName(dbi.Key()), f.Version)
 			return ts
@@ -246,6 +272,8 @@ func ldbReplaceWithDelete(db *leveldb.DB, repo, node []byte, fs []protocol.FileI
 }
 
 func ldbUpdate(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo) uint64 {
+	defer runtime.GC()
+
 	batch := new(leveldb.Batch)
 	snap, err := db.GetSnapshot()
 	if err != nil {
@@ -262,20 +290,30 @@ func ldbUpdate(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo) uint64
 			if lv := ldbInsert(batch, repo, node, name, f); lv > maxLocalVer {
 				maxLocalVer = lv
 			}
-			ldbUpdateGlobal(snap, batch, repo, node, name, f.Version)
+			if f.IsInvalid() {
+				ldbRemoveFromGlobal(snap, batch, repo, node, name)
+			} else {
+				ldbUpdateGlobal(snap, batch, repo, node, name, f.Version)
+			}
 			continue
 		}
 
-		var ef protocol.FileInfo
+		var ef protocol.FileInfoTruncated
 		err = ef.UnmarshalXDR(bs)
 		if err != nil {
 			panic(err)
 		}
-		if ef.Version != f.Version {
+		// Flags might change without the version being bumped when we set the
+		// invalid flag on an existing file.
+		if ef.Version != f.Version || ef.Flags != f.Flags {
 			if lv := ldbInsert(batch, repo, node, name, f); lv > maxLocalVer {
 				maxLocalVer = lv
 			}
-			ldbUpdateGlobal(snap, batch, repo, node, name, f.Version)
+			if f.IsInvalid() {
+				ldbRemoveFromGlobal(snap, batch, repo, node, name)
+			} else {
+				ldbUpdateGlobal(snap, batch, repo, node, name, f.Version)
+			}
 		}
 	}
 
@@ -367,7 +405,9 @@ func ldbRemoveFromGlobal(db dbReader, batch dbWriter, repo, node, file []byte) {
 	gk := globalKey(repo, file)
 	svl, err := db.Get(gk, nil)
 	if err != nil {
-		panic(err)
+		// We might be called to "remove" a global version that doesn't exist
+		// if the first update for the file is already marked invalid.
+		return
 	}
 
 	var fl versionList
@@ -390,7 +430,7 @@ func ldbRemoveFromGlobal(db dbReader, batch dbWriter, repo, node, file []byte) {
 	}
 }
 
-func ldbWithHave(db *leveldb.DB, repo, node []byte, fn fileIterator) {
+func ldbWithHave(db *leveldb.DB, repo, node []byte, truncate bool, fn fileIterator) {
 	start := nodeKey(repo, node, nil)                            // before all repo/node files
 	limit := nodeKey(repo, node, []byte{0xff, 0xff, 0xff, 0xff}) // after all repo/node files
 	snap, err := db.GetSnapshot()
@@ -402,8 +442,7 @@ func ldbWithHave(db *leveldb.DB, repo, node []byte, fn fileIterator) {
 	defer dbi.Release()
 
 	for dbi.Next() {
-		var f protocol.FileInfo
-		err := f.UnmarshalXDR(dbi.Value())
+		f, err := unmarshalTrunc(dbi.Value(), truncate)
 		if err != nil {
 			panic(err)
 		}
@@ -413,7 +452,9 @@ func ldbWithHave(db *leveldb.DB, repo, node []byte, fn fileIterator) {
 	}
 }
 
-func ldbWithAllRepo(db *leveldb.DB, repo []byte, fn func(node []byte, f protocol.FileInfo) bool) {
+func ldbWithAllRepoTruncated(db *leveldb.DB, repo []byte, fn func(node []byte, f protocol.FileInfoTruncated) bool) {
+	defer runtime.GC()
+
 	start := nodeKey(repo, nil, nil)                                                // before all repo/node files
 	limit := nodeKey(repo, protocol.LocalNodeID[:], []byte{0xff, 0xff, 0xff, 0xff}) // after all repo/node files
 	snap, err := db.GetSnapshot()
@@ -426,7 +467,7 @@ func ldbWithAllRepo(db *leveldb.DB, repo []byte, fn func(node []byte, f protocol
 
 	for dbi.Next() {
 		node := nodeKeyNode(dbi.Key())
-		var f protocol.FileInfo
+		var f protocol.FileInfoTruncated
 		err := f.UnmarshalXDR(dbi.Value())
 		if err != nil {
 			panic(err)
@@ -436,40 +477,6 @@ func ldbWithAllRepo(db *leveldb.DB, repo []byte, fn func(node []byte, f protocol
 		}
 	}
 }
-
-/*
-func ldbCheckGlobalConsistency(db *leveldb.DB, repo []byte) {
-	l.Debugf("Checking global consistency for %q", repo)
-	start := nodeKey(repo, nil, nil)                                                // before all repo/node files
-	limit := nodeKey(repo, protocol.LocalNodeID[:], []byte{0xff, 0xff, 0xff, 0xff}) // after all repo/node files
-	snap, err := db.GetSnapshot()
-	if err != nil {
-		panic(err)
-	}
-	defer snap.Release()
-	dbi := snap.NewIterator(&util.Range{Start: start, Limit: limit}, nil)
-	defer dbi.Release()
-
-	batch := new(leveldb.Batch)
-	i := 0
-	for dbi.Next() {
-		repo := nodeKeyRepo(dbi.Key())
-		node := nodeKeyNode(dbi.Key())
-		var f protocol.FileInfo
-		err := f.UnmarshalXDR(dbi.Value())
-		if err != nil {
-			panic(err)
-		}
-		if ldbUpdateGlobal(snap, batch, repo, node, []byte(f.Name), f.Version) {
-			var nodeID protocol.NodeID
-			copy(nodeID[:], node)
-			l.Debugf("fixed global for %q %s %q", repo, nodeID, f.Name)
-		}
-		i++
-	}
-	l.Debugln("Done", i)
-}
-*/
 
 func ldbGet(db *leveldb.DB, repo, node, file []byte) protocol.FileInfo {
 	nk := nodeKey(repo, node, file)
@@ -529,7 +536,9 @@ func ldbGetGlobal(db *leveldb.DB, repo, file []byte) protocol.FileInfo {
 	return f
 }
 
-func ldbWithGlobal(db *leveldb.DB, repo []byte, fn fileIterator) {
+func ldbWithGlobal(db *leveldb.DB, repo []byte, truncate bool, fn fileIterator) {
+	defer runtime.GC()
+
 	start := globalKey(repo, nil)
 	limit := globalKey(repo, []byte{0xff, 0xff, 0xff, 0xff})
 	snap, err := db.GetSnapshot()
@@ -556,8 +565,7 @@ func ldbWithGlobal(db *leveldb.DB, repo []byte, fn fileIterator) {
 			panic(err)
 		}
 
-		var f protocol.FileInfo
-		err = f.UnmarshalXDR(bs)
+		f, err := unmarshalTrunc(bs, truncate)
 		if err != nil {
 			panic(err)
 		}
@@ -596,7 +604,9 @@ func ldbAvailability(db *leveldb.DB, repo, file []byte) []protocol.NodeID {
 	return nodes
 }
 
-func ldbWithNeed(db *leveldb.DB, repo, node []byte, fn fileIterator) {
+func ldbWithNeed(db *leveldb.DB, repo, node []byte, truncate bool, fn fileIterator) {
+	defer runtime.GC()
+
 	start := globalKey(repo, nil)
 	limit := globalKey(repo, []byte{0xff, 0xff, 0xff, 0xff})
 	snap, err := db.GetSnapshot()
@@ -607,6 +617,7 @@ func ldbWithNeed(db *leveldb.DB, repo, node []byte, fn fileIterator) {
 	dbi := snap.NewIterator(&util.Range{Start: start, Limit: limit}, nil)
 	defer dbi.Release()
 
+outer:
 	for dbi.Next() {
 		var vl versionList
 		err := vl.UnmarshalXDR(dbi.Value())
@@ -632,30 +643,121 @@ func ldbWithNeed(db *leveldb.DB, repo, node []byte, fn fileIterator) {
 
 		if need || !have {
 			name := globalKeyName(dbi.Key())
-			fk := nodeKey(repo, vl.versions[0].node, name)
-			bs, err := snap.Get(fk, nil)
-			if err != nil {
-				panic(err)
-			}
+			needVersion := vl.versions[0].version
+		inner:
+			for i := range vl.versions {
+				if vl.versions[i].version != needVersion {
+					// We haven't found a valid copy of the file with the needed version.
+					continue outer
+				}
+				fk := nodeKey(repo, vl.versions[i].node, name)
+				bs, err := snap.Get(fk, nil)
+				if err != nil {
+					panic(err)
+				}
 
-			var gf protocol.FileInfo
-			err = gf.UnmarshalXDR(bs)
-			if err != nil {
-				panic(err)
-			}
+				gf, err := unmarshalTrunc(bs, truncate)
+				if err != nil {
+					panic(err)
+				}
 
-			if protocol.IsDeleted(gf.Flags) && !have {
-				// We don't need deleted files that we don't have
-				continue
-			}
+				if gf.IsInvalid() {
+					// The file is marked invalid for whatever reason, don't use it.
+					continue inner
+				}
 
-			if debug {
-				l.Debugf("need repo=%q node=%v name=%q need=%v have=%v haveV=%d globalV=%d", repo, protocol.NodeIDFromBytes(node), name, need, have, haveVersion, vl.versions[0].version)
-			}
+				if gf.IsDeleted() && !have {
+					// We don't need deleted files that we don't have
+					continue outer
+				}
 
-			if cont := fn(gf); !cont {
-				return
+				if debug {
+					l.Debugf("need repo=%q node=%v name=%q need=%v have=%v haveV=%d globalV=%d", repo, protocol.NodeIDFromBytes(node), name, need, have, haveVersion, vl.versions[0].version)
+				}
+
+				if cont := fn(gf); !cont {
+					return
+				}
+
+				// This file is handled, no need to look further in the version list
+				continue outer
 			}
 		}
+	}
+}
+
+func ldbListRepos(db *leveldb.DB) []string {
+	defer runtime.GC()
+
+	start := []byte{keyTypeGlobal}
+	limit := []byte{keyTypeGlobal + 1}
+	snap, err := db.GetSnapshot()
+	if err != nil {
+		panic(err)
+	}
+	defer snap.Release()
+	dbi := snap.NewIterator(&util.Range{Start: start, Limit: limit}, nil)
+	defer dbi.Release()
+
+	repoExists := make(map[string]bool)
+	for dbi.Next() {
+		repo := string(globalKeyRepo(dbi.Key()))
+		if !repoExists[repo] {
+			repoExists[repo] = true
+		}
+	}
+
+	repos := make([]string, 0, len(repoExists))
+	for k := range repoExists {
+		repos = append(repos, k)
+	}
+
+	sort.Strings(repos)
+	return repos
+}
+
+func ldbDropRepo(db *leveldb.DB, repo []byte) {
+	defer runtime.GC()
+
+	snap, err := db.GetSnapshot()
+	if err != nil {
+		panic(err)
+	}
+	defer snap.Release()
+
+	// Remove all items related to the given repo from the node->file bucket
+	start := []byte{keyTypeNode}
+	limit := []byte{keyTypeNode + 1}
+	dbi := snap.NewIterator(&util.Range{Start: start, Limit: limit}, nil)
+	for dbi.Next() {
+		itemRepo := nodeKeyRepo(dbi.Key())
+		if bytes.Compare(repo, itemRepo) == 0 {
+			db.Delete(dbi.Key(), nil)
+		}
+	}
+	dbi.Release()
+
+	// Remove all items related to the given repo from the global bucket
+	start = []byte{keyTypeGlobal}
+	limit = []byte{keyTypeGlobal + 1}
+	dbi = snap.NewIterator(&util.Range{Start: start, Limit: limit}, nil)
+	for dbi.Next() {
+		itemRepo := globalKeyRepo(dbi.Key())
+		if bytes.Compare(repo, itemRepo) == 0 {
+			db.Delete(dbi.Key(), nil)
+		}
+	}
+	dbi.Release()
+}
+
+func unmarshalTrunc(bs []byte, truncate bool) (protocol.FileIntf, error) {
+	if truncate {
+		var tf protocol.FileInfoTruncated
+		err := tf.UnmarshalXDR(bs)
+		return tf, err
+	} else {
+		var tf protocol.FileInfo
+		err := tf.UnmarshalXDR(bs)
+		return tf, err
 	}
 }

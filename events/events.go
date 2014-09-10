@@ -20,11 +20,13 @@ const (
 	NodeDiscovered
 	NodeConnected
 	NodeDisconnected
+	NodeRejected
 	LocalIndexUpdated
 	RemoteIndexUpdated
 	ItemStarted
-	ItemCompleted
 	StateChanged
+	RepoRejected
+	ConfigSaved
 
 	AllEvents = ^EventType(0)
 )
@@ -43,6 +45,8 @@ func (t EventType) String() string {
 		return "NodeConnected"
 	case NodeDisconnected:
 		return "NodeDisconnected"
+	case NodeRejected:
+		return "NodeRejected"
 	case LocalIndexUpdated:
 		return "LocalIndexUpdated"
 	case RemoteIndexUpdated:
@@ -51,6 +55,10 @@ func (t EventType) String() string {
 		return "ItemStarted"
 	case StateChanged:
 		return "StateChanged"
+	case RepoRejected:
+		return "RepoRejected"
+	case ConfigSaved:
+		return "ConfigSaved"
 	default:
 		return "Unknown"
 	}

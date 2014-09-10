@@ -5,8 +5,6 @@
 package config
 
 import (
-	"bytes"
-	"io"
 	"os"
 	"reflect"
 	"testing"
@@ -30,19 +28,18 @@ func TestDefaultValues(t *testing.T) {
 		GlobalAnnEnabled:   true,
 		LocalAnnEnabled:    true,
 		LocalAnnPort:       21025,
+		LocalAnnMCAddr:     "[ff32::5222]:21026",
 		ParallelRequests:   16,
 		MaxSendKbps:        0,
-		RescanIntervalS:    60,
+		MaxRecvKbps:        0,
 		ReconnectIntervalS: 60,
-		MaxChangeKbps:      10000,
 		StartBrowser:       true,
 		UPnPEnabled:        true,
+		UPnPLease:          0,
+		UPnPRenewal:        30,
 	}
 
-	cfg, err := Load(bytes.NewReader(nil), node1)
-	if err != io.EOF {
-		t.Error(err)
-	}
+	cfg := New("test", node1)
 
 	if !reflect.DeepEqual(cfg.Options, expected) {
 		t.Errorf("Default config differs;\n  E: %#v\n  A: %#v", expected, cfg.Options)
@@ -50,73 +47,19 @@ func TestDefaultValues(t *testing.T) {
 }
 
 func TestNodeConfig(t *testing.T) {
-	v1data := []byte(`
-<configuration version="1">
-    <repository id="test" directory="~/Sync">
-        <node id="AIR6LPZ7K4PTTUXQSMUUCPQ5YWOEDFIIQJUG7772YQXXR5YD6AWQ" name="node one">
-            <address>a</address>
-        </node>
-        <node id="P56IOI7MZJNU2IQGDREYDM2MGTMGL3BXNPQ6W5BTBBZ4TJXZWICQ" name="node two">
-            <address>b</address>
-        </node>
-        <node id="AIR6LPZ7K4PTTUXQSMUUCPQ5YWOEDFIIQJUG7772YQXXR5YD6AWQ" name="node one">
-            <address>a</address>
-        </node>
-        <node id="P56IOI7MZJNU2IQGDREYDM2MGTMGL3BXNPQ6W5BTBBZ4TJXZWICQ" name="node two">
-            <address>b</address>
-        </node>
-    </repository>
-    <options>
-        <readOnly>true</readOnly>
-    </options>
-</configuration>
-`)
-
-	v2data := []byte(`
-<configuration version="2">
-    <repository id="test" directory="~/Sync" ro="true">
-        <node id="P56IOI7MZJNU2IQGDREYDM2MGTMGL3BXNPQ6W5BTBBZ4TJXZWICQ"/>
-        <node id="AIR6LPZ7K4PTTUXQSMUUCPQ5YWOEDFIIQJUG7772YQXXR5YD6AWQ"/>
-        <node id="C4YBIESWDUAIGU62GOSRXCRAAJDWVE3TKCPMURZE2LH5QHAF576A"/>
-        <node id="P56IOI7MZJNU2IQGDREYDM2MGTMGL3BXNPQ6W5BTBBZ4TJXZWICQ"/>
-        <node id="AIR6LPZ7K4PTTUXQSMUUCPQ5YWOEDFIIQJUG7772YQXXR5YD6AWQ"/>
-        <node id="C4YBIESWDUAIGU62GOSRXCRAAJDWVE3TKCPMURZE2LH5QHAF576A"/>
-    </repository>
-    <node id="AIR6LPZ7K4PTTUXQSMUUCPQ5YWOEDFIIQJUG7772YQXXR5YD6AWQ" name="node one">
-        <address>a</address>
-    </node>
-    <node id="P56IOI7MZJNU2IQGDREYDM2MGTMGL3BXNPQ6W5BTBBZ4TJXZWICQ" name="node two">
-        <address>b</address>
-    </node>
-</configuration>
-`)
-
-	v3data := []byte(`
-<configuration version="3">
-    <repository id="test" directory="~/Sync" ro="true" ignorePerms="false">
-        <node id="AIR6LPZ-7K4PTTV-UXQSMUU-CPQ5YWH-OEDFIIQ-JUG777G-2YQXXR5-YD6AWQR" compression="false"></node>
-        <node id="P56IOI7-MZJNU2Y-IQGDREY-DM2MGTI-MGL3BXN-PQ6W5BM-TBBZ4TJ-XZWICQ2" compression="false"></node>
-    </repository>
-    <node id="AIR6LPZ-7K4PTTV-UXQSMUU-CPQ5YWH-OEDFIIQ-JUG777G-2YQXXR5-YD6AWQR" name="node one" compression="true">
-        <address>a</address>
-    </node>
-    <node id="P56IOI7-MZJNU2Y-IQGDREY-DM2MGTI-MGL3BXN-PQ6W5BM-TBBZ4TJ-XZWICQ2" name="node two" compression="true">
-        <address>b</address>
-    </node>
-</configuration>`)
-
-	for i, data := range [][]byte{v1data, v2data, v3data} {
-		cfg, err := Load(bytes.NewReader(data), node1)
+	for i, ver := range []string{"v1", "v2", "v3", "v4"} {
+		cfg, err := Load("testdata/"+ver+".xml", node1)
 		if err != nil {
 			t.Error(err)
 		}
 
 		expectedRepos := []RepositoryConfiguration{
 			{
-				ID:        "test",
-				Directory: "~/Sync",
-				Nodes:     []NodeConfiguration{{NodeID: node1}, {NodeID: node4}},
-				ReadOnly:  true,
+				ID:              "test",
+				Directory:       "~/Sync",
+				Nodes:           []RepositoryNodeConfiguration{{NodeID: node1}, {NodeID: node4}},
+				ReadOnly:        true,
+				RescanIntervalS: 600,
 			},
 		}
 		expectedNodes := []NodeConfiguration{
@@ -135,7 +78,7 @@ func TestNodeConfig(t *testing.T) {
 		}
 		expectedNodeIDs := []protocol.NodeID{node1, node4}
 
-		if cfg.Version != 3 {
+		if cfg.Version != 4 {
 			t.Errorf("%d: Incorrect version %d != 3", i, cfg.Version)
 		}
 		if !reflect.DeepEqual(cfg.Repositories, expectedRepos) {
@@ -158,14 +101,7 @@ func TestNodeConfig(t *testing.T) {
 }
 
 func TestNoListenAddress(t *testing.T) {
-	data := []byte(`<configuration version="1">
-    <options>
-        <listenAddress></listenAddress>
-    </options>
-</configuration>
-`)
-
-	cfg, err := Load(bytes.NewReader(data), node1)
+	cfg, err := Load("testdata/nolistenaddress.xml", node1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -177,41 +113,24 @@ func TestNoListenAddress(t *testing.T) {
 }
 
 func TestOverriddenValues(t *testing.T) {
-	data := []byte(`<configuration version="2">
-    <options>
-       <listenAddress>:23000</listenAddress>
-        <allowDelete>false</allowDelete>
-        <globalAnnounceServer>syncthing.nym.se:22026</globalAnnounceServer>
-        <globalAnnounceEnabled>false</globalAnnounceEnabled>
-        <localAnnounceEnabled>false</localAnnounceEnabled>
-        <localAnnouncePort>42123</localAnnouncePort>
-        <parallelRequests>32</parallelRequests>
-        <maxSendKbps>1234</maxSendKbps>
-        <rescanIntervalS>600</rescanIntervalS>
-        <reconnectionIntervalS>6000</reconnectionIntervalS>
-        <maxChangeKbps>2345</maxChangeKbps>
-        <startBrowser>false</startBrowser>
-        <upnpEnabled>false</upnpEnabled>
-    </options>
-</configuration>
-`)
-
 	expected := OptionsConfiguration{
 		ListenAddress:      []string{":23000"},
 		GlobalAnnServer:    "syncthing.nym.se:22026",
 		GlobalAnnEnabled:   false,
 		LocalAnnEnabled:    false,
 		LocalAnnPort:       42123,
+		LocalAnnMCAddr:     "quux:3232",
 		ParallelRequests:   32,
 		MaxSendKbps:        1234,
-		RescanIntervalS:    600,
+		MaxRecvKbps:        2341,
 		ReconnectIntervalS: 6000,
-		MaxChangeKbps:      2345,
 		StartBrowser:       false,
 		UPnPEnabled:        false,
+		UPnPLease:          60,
+		UPnPRenewal:        15,
 	}
 
-	cfg, err := Load(bytes.NewReader(data), node1)
+	cfg, err := Load("testdata/overridenvalues.xml", node1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -222,19 +141,6 @@ func TestOverriddenValues(t *testing.T) {
 }
 
 func TestNodeAddressesDynamic(t *testing.T) {
-	data := []byte(`
-<configuration version="2">
-    <node id="AIR6LPZ7K4PTTUXQSMUUCPQ5YWOEDFIIQJUG7772YQXXR5YD6AWQ">
-        <address></address>
-    </node>
-    <node id="GYRZZQBIRNPV4T7TC52WEQYJ3TFDQW6MWDFLMU4SSSU6EMFBK2VA">
-    </node>
-    <node id="LGFPDIT7SKNNJVJZA4FC7QNCRKCE753K72BW5QD2FOZ7FRFEP57Q">
-        <address>dynamic</address>
-    </node>
-</configuration>
-`)
-
 	name, _ := os.Hostname()
 	expected := []NodeConfiguration{
 		{
@@ -259,7 +165,7 @@ func TestNodeAddressesDynamic(t *testing.T) {
 		},
 	}
 
-	cfg, err := Load(bytes.NewReader(data), node4)
+	cfg, err := Load("testdata/nodeaddressesdynamic.xml", node4)
 	if err != nil {
 		t.Error(err)
 	}
@@ -270,23 +176,6 @@ func TestNodeAddressesDynamic(t *testing.T) {
 }
 
 func TestNodeAddressesStatic(t *testing.T) {
-	data := []byte(`
-<configuration version="3">
-    <node id="AIR6LPZ7K4PTTUXQSMUUCPQ5YWOEDFIIQJUG7772YQXXR5YD6AWQ">
-        <address>192.0.2.1</address>
-        <address>192.0.2.2</address>
-    </node>
-    <node id="GYRZZQBIRNPV4T7TC52WEQYJ3TFDQW6MWDFLMU4SSSU6EMFBK2VA">
-        <address>192.0.2.3:6070</address>
-        <address>[2001:db8::42]:4242</address>
-    </node>
-    <node id="LGFPDIT7SKNNJVJZA4FC7QNCRKCE753K72BW5QD2FOZ7FRFEP57Q">
-        <address>[2001:db8::44]:4444</address>
-        <address>192.0.2.4:6090</address>
-    </node>
-</configuration>
-`)
-
 	name, _ := os.Hostname()
 	expected := []NodeConfiguration{
 		{
@@ -308,7 +197,7 @@ func TestNodeAddressesStatic(t *testing.T) {
 		},
 	}
 
-	cfg, err := Load(bytes.NewReader(data), node4)
+	cfg, err := Load("testdata/nodeaddressesstatic.xml", node4)
 	if err != nil {
 		t.Error(err)
 	}
@@ -319,18 +208,7 @@ func TestNodeAddressesStatic(t *testing.T) {
 }
 
 func TestVersioningConfig(t *testing.T) {
-	data := []byte(`
-		<configuration version="2">
-			<repository id="test" directory="~/Sync" ro="true">
-				<versioning type="simple">
-					<param key="foo" val="bar"/>
-					<param key="baz" val="quux"/>
-				</versioning>
-			</repository>
-		</configuration>
-		`)
-
-	cfg, err := Load(bytes.NewReader(data), node4)
+	cfg, err := Load("testdata/versioningconfig.xml", node4)
 	if err != nil {
 		t.Error(err)
 	}
@@ -349,5 +227,69 @@ func TestVersioningConfig(t *testing.T) {
 	}
 	if !reflect.DeepEqual(vc.Params, expected) {
 		t.Errorf("vc.Params differ;\n  E: %#v\n  A: %#v", expected, vc.Params)
+	}
+}
+
+func TestNewSaveLoad(t *testing.T) {
+	path := "testdata/temp.xml"
+	os.Remove(path)
+
+	exists := func(path string) bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+
+	cfg := New(path, node1)
+
+	// To make the equality pass later
+	cfg.XMLName.Local = "configuration"
+
+	if exists(path) {
+		t.Error(path, "exists")
+	}
+
+	err := cfg.Save()
+	if err != nil {
+		t.Error(err)
+	}
+	if !exists(path) {
+		t.Error(path, "does not exist")
+	}
+
+	cfg2, err := Load(path, node1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if !reflect.DeepEqual(cfg, cfg2) {
+		t.Errorf("Configs are not equal;\n  E:  %#v\n  A:  %#v", cfg, cfg2)
+	}
+
+	cfg.GUI.User = "test"
+	cfg.Save()
+
+	cfg2, err = Load(path, node1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if cfg2.GUI.User != "test" || !reflect.DeepEqual(cfg, cfg2) {
+		t.Errorf("Configs are not equal;\n  E:  %#v\n  A:  %#v", cfg, cfg2)
+	}
+
+	os.Remove(path)
+}
+
+func TestPrepare(t *testing.T) {
+	var cfg Configuration
+
+	if cfg.Repositories != nil || cfg.Nodes != nil || cfg.Options.ListenAddress != nil {
+		t.Error("Expected nil")
+	}
+
+	cfg.prepare(node1)
+
+	if cfg.Repositories == nil || cfg.Nodes == nil || cfg.Options.ListenAddress == nil {
+		t.Error("Unexpected nil")
 	}
 }

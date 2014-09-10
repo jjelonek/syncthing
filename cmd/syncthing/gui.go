@@ -5,13 +5,10 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
-	"math/rand"
 	"mime"
 	"net"
 	"net/http"
@@ -24,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"crypto/tls"
 	"code.google.com/p/go.crypto/bcrypt"
 	"github.com/syncthing/syncthing/auto"
 	"github.com/syncthing/syncthing/config"
@@ -45,8 +41,6 @@ var (
 	configInSync = true
 	guiErrors    = []guiError{}
 	guiErrorsMut sync.Mutex
-	static       func(http.ResponseWriter, *http.Request, *log.Logger)
-	apiKey       string
 	modt         = time.Now().UTC().Format(http.TimeFormat)
 	eventSub     *events.BufferedSubscription
 )
@@ -57,7 +51,7 @@ const (
 
 func init() {
 	l.AddHandler(logger.LevelWarn, showGuiError)
-	sub := events.Default.Subscribe(^events.EventType(events.ItemStarted | events.ItemCompleted))
+	sub := events.Default.Subscribe(events.AllEvents)
 	eventSub = events.NewBufferedSubscription(sub, 1000)
 }
 
@@ -90,9 +84,6 @@ func startGUI(cfg config.GUIConfiguration, assetDir string, m *model.Model) erro
 		}
 	}
 
-	apiKey = cfg.APIKey
-	loadCsrfTokens()
-
 	// The GET handlers
 	getRestMux := http.NewServeMux()
 	getRestMux.HandleFunc("/rest/completion", withModel(m, restGetCompletion))
@@ -111,6 +102,7 @@ func startGUI(cfg config.GUIConfiguration, assetDir string, m *model.Model) erro
 	getRestMux.HandleFunc("/rest/system", restGetSystem)
 	getRestMux.HandleFunc("/rest/upgrade", restGetUpgrade)
 	getRestMux.HandleFunc("/rest/version", restGetVersion)
+	getRestMux.HandleFunc("/rest/stats/node", withModel(m, restGetNodeStats))
 
 	// Debug endpoints, not for general use
 	getRestMux.HandleFunc("/rest/debug/peerCompletion", withModel(m, restGetPeerCompletion))
@@ -126,6 +118,7 @@ func startGUI(cfg config.GUIConfiguration, assetDir string, m *model.Model) erro
 	postRestMux.HandleFunc("/rest/restart", restPostRestart)
 	postRestMux.HandleFunc("/rest/shutdown", restPostShutdown)
 	postRestMux.HandleFunc("/rest/upgrade", restPostUpgrade)
+	postRestMux.HandleFunc("/rest/scan", withModel(m, restPostScan))
 
 	// A handler that splits requests between the two above and disables
 	// caching
@@ -141,11 +134,14 @@ func startGUI(cfg config.GUIConfiguration, assetDir string, m *model.Model) erro
 
 	// Wrap everything in CSRF protection. The /rest prefix should be
 	// protected, other requests will grant cookies.
-	handler := csrfMiddleware("/rest", mux)
+	handler := csrfMiddleware("/rest", cfg.APIKey, mux)
+
+	// Add our version as a header to responses
+	handler = withVersionMiddleware(handler)
 
 	// Wrap everything in basic auth, if user/password is set.
 	if len(cfg.User) > 0 {
-		handler = basicAuthMiddleware(cfg.User, cfg.Password, handler)
+		handler = basicAuthAndSessionMiddleware(cfg, handler)
 	}
 
 	go http.Serve(listener, handler)
@@ -168,6 +164,13 @@ func getPostHandler(get, post http.Handler) http.Handler {
 func noCacheMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
+		h.ServeHTTP(w, r)
+	})
+}
+
+func withVersionMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Syncthing-Version", Version)
 		h.ServeHTTP(w, r)
 	})
 }
@@ -245,7 +248,7 @@ func restGetModel(m *model.Model, w http.ResponseWriter, r *http.Request) {
 func restPostOverride(m *model.Model, w http.ResponseWriter, r *http.Request) {
 	var qs = r.URL.Query()
 	var repo = qs.Get("repo")
-	m.Override(repo)
+	go m.Override(repo)
 }
 
 func restGetNeed(m *model.Model, w http.ResponseWriter, r *http.Request) {
@@ -264,6 +267,12 @@ func restGetConnections(m *model.Model, w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(res)
 }
 
+func restGetNodeStats(m *model.Model, w http.ResponseWriter, r *http.Request) {
+	var res = m.NodeStatistics()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(res)
+}
+
 func restGetConfig(w http.ResponseWriter, r *http.Request) {
 	encCfg := cfg
 	if encCfg.GUI.Password != "" {
@@ -277,7 +286,9 @@ func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
 	var newCfg config.Configuration
 	err := json.NewDecoder(r.Body).Decode(&newCfg)
 	if err != nil {
-		l.Warnln(err)
+		l.Warnln("decoding posted config:", err)
+		http.Error(w, err.Error(), 500)
+		return
 	} else {
 		if newCfg.GUI.Password == "" {
 			// Leave it empty
@@ -286,7 +297,9 @@ func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
 		} else {
 			hash, err := bcrypt.GenerateFromPassword([]byte(newCfg.GUI.Password), 0)
 			if err != nil {
-				l.Warnln(err)
+				l.Warnln("bcrypting password:", err)
+				http.Error(w, err.Error(), 500)
+				return
 			} else {
 				newCfg.GUI.Password = string(hash)
 			}
@@ -341,8 +354,9 @@ func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
 
 		// Activate and save
 
+		newCfg.Location = cfg.Location
+		newCfg.Save()
 		cfg = newCfg
-		saveConfig()
 	}
 }
 
@@ -384,7 +398,7 @@ func restGetSystem(w http.ResponseWriter, r *http.Request) {
 	res["myID"] = myID.String()
 	res["goroutines"] = runtime.NumGoroutine()
 	res["alloc"] = m.Alloc
-	res["sys"] = m.Sys
+	res["sys"] = m.Sys - m.HeapReleased
 	res["tilde"] = expandTilde("~")
 	if cfg.Options.GlobalAnnEnabled && discoverer != nil {
 		res["extAnnounceOK"] = discoverer.ExtAnnounceOK()
@@ -454,12 +468,18 @@ func restGetEvents(w http.ResponseWriter, r *http.Request) {
 	since, _ := strconv.Atoi(sinceStr)
 	limit, _ := strconv.Atoi(limitStr)
 
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	// Flush before blocking, to indicate that we've received the request
+	// and that it should not be retried.
+	f := w.(http.Flusher)
+	f.Flush()
+
 	evs := eventSub.Since(since, nil)
 	if 0 < limit && limit < len(evs) {
 		evs = evs[len(evs)-limit:]
 	}
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(evs)
 }
 
@@ -498,25 +518,25 @@ func restGetLang(w http.ResponseWriter, r *http.Request) {
 	lang := r.Header.Get("Accept-Language")
 	var langs []string
 	for _, l := range strings.Split(lang, ",") {
-		if len(l) >= 2 {
-			langs = append(langs, l[:2])
-		}
+		parts := strings.SplitN(l, ";", 2)
+		langs = append(langs, strings.ToLower(strings.TrimSpace(parts[0])))
 	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(langs)
 }
 
 func restPostUpgrade(w http.ResponseWriter, r *http.Request) {
 	rel, err := upgrade.LatestRelease(strings.Contains(Version, "-beta"))
 	if err != nil {
-		l.Warnln(err)
+		l.Warnln("getting latest release:", err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
 	if upgrade.CompareVersions(rel.Tag, Version) == 1 {
-		err = upgrade.UpgradeTo(rel)
+		err = upgrade.UpgradeTo(rel, GoArchExtra)
 		if err != nil {
-			l.Warnln(err)
+			l.Warnln("upgrading:", err)
 			http.Error(w, err.Error(), 500)
 			return
 		}
@@ -525,9 +545,19 @@ func restPostUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func restPostScan(m *model.Model, w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	repo := qs.Get("repo")
+	sub := qs.Get("sub")
+	err := m.ScanRepoSub(repo, sub)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+	}
+}
+
 func getQR(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	text := r.FormValue("text")
+	var qs = r.URL.Query()
+	var text = qs.Get("text")
 	code, err := qr.Encode(text, qr.M)
 	if err != nil {
 		http.Error(w, "Invalid", 500)
@@ -563,57 +593,9 @@ func restGetPeerCompletion(m *model.Model, w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(comp)
 }
 
-func basicAuthMiddleware(username string, passhash string, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if validAPIKey(r.Header.Get("X-API-Key")) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		error := func() {
-			time.Sleep(time.Duration(rand.Intn(100)+100) * time.Millisecond)
-			w.Header().Set("WWW-Authenticate", "Basic realm=\"Authorization Required\"")
-			http.Error(w, "Not Authorized", http.StatusUnauthorized)
-		}
-
-		hdr := r.Header.Get("Authorization")
-		if !strings.HasPrefix(hdr, "Basic ") {
-			error()
-			return
-		}
-
-		hdr = hdr[6:]
-		bs, err := base64.StdEncoding.DecodeString(hdr)
-		if err != nil {
-			error()
-			return
-		}
-
-		fields := bytes.SplitN(bs, []byte(":"), 2)
-		if len(fields) != 2 {
-			error()
-			return
-		}
-
-		if string(fields[0]) != username {
-			error()
-			return
-		}
-
-		if err := bcrypt.CompareHashAndPassword([]byte(passhash), fields[1]); err != nil {
-			error()
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-func validAPIKey(k string) bool {
-	return len(apiKey) > 0 && k == apiKey
-}
-
 func embeddedStatic(assetDir string) http.Handler {
+	assets := auto.Assets()
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		file := r.URL.Path
 
@@ -634,13 +616,13 @@ func embeddedStatic(assetDir string) http.Handler {
 			}
 		}
 
-		bs, ok := auto.Assets[file]
+		bs, ok := assets[file]
 		if !ok {
 			http.NotFound(w, r)
 			return
 		}
 
-		mtype := mime.TypeByExtension(filepath.Ext(r.URL.Path))
+		mtype := mimeTypeForFile(file)
 		if len(mtype) != 0 {
 			w.Header().Set("Content-Type", mtype)
 		}
@@ -649,4 +631,29 @@ func embeddedStatic(assetDir string) http.Handler {
 
 		w.Write(bs)
 	})
+}
+
+func mimeTypeForFile(file string) string {
+	// We use a built in table of the common types since the system
+	// TypeByExtension might be unreliable. But if we don't know, we delegate
+	// to the system.
+	ext := filepath.Ext(file)
+	switch ext {
+	case ".htm", ".html":
+		return "text/html"
+	case ".css":
+		return "text/css"
+	case ".js":
+		return "application/javascript"
+	case ".json":
+		return "application/json"
+	case ".png":
+		return "image/png"
+	case ".ttf":
+		return "application/x-font-ttf"
+	case ".woff":
+		return "application/x-font-woff"
+	default:
+		return mime.TypeByExtension(ext)
+	}
 }

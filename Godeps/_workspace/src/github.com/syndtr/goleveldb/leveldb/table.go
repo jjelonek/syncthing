@@ -275,6 +275,7 @@ type tOps struct {
 	s       *session
 	cache   cache.Cache
 	cacheNS cache.Namespace
+	bpool   *util.BufferPool
 }
 
 // Creates an empty table and returns table writer.
@@ -296,7 +297,7 @@ func (t *tOps) create() (*tWriter, error) {
 func (t *tOps) createFrom(src iterator.Iterator) (f *tFile, n int, err error) {
 	w, err := t.create()
 	if err != nil {
-		return f, n, err
+		return
 	}
 
 	defer func() {
@@ -321,33 +322,24 @@ func (t *tOps) createFrom(src iterator.Iterator) (f *tFile, n int, err error) {
 	return
 }
 
-// Opens table. It returns a cache object, which should
+// Opens table. It returns a cache handle, which should
 // be released after use.
-func (t *tOps) open(f *tFile) (c cache.Object, err error) {
+func (t *tOps) open(f *tFile) (ch cache.Handle, err error) {
 	num := f.file.Num()
-	c, ok := t.cacheNS.Get(num, func() (ok bool, value interface{}, charge int, fin cache.SetFin) {
+	ch = t.cacheNS.Get(num, func() (charge int, value interface{}) {
 		var r storage.Reader
 		r, err = f.file.Open()
 		if err != nil {
-			return
+			return 0, nil
 		}
 
-		o := t.s.o
-
-		var cacheNS cache.Namespace
-		if bc := o.GetBlockCache(); bc != nil {
-			cacheNS = bc.GetNamespace(num)
+		var bcacheNS cache.Namespace
+		if bc := t.s.o.GetBlockCache(); bc != nil {
+			bcacheNS = bc.GetNamespace(num)
 		}
-
-		ok = true
-		value = table.NewReader(r, int64(f.size), cacheNS, o)
-		charge = 1
-		fin = func() {
-			r.Close()
-		}
-		return
+		return 1, table.NewReader(r, int64(f.size), bcacheNS, t.bpool, t.s.o)
 	})
-	if !ok && err == nil {
+	if ch == nil && err == nil {
 		err = ErrClosed
 	}
 	return
@@ -356,34 +348,33 @@ func (t *tOps) open(f *tFile) (c cache.Object, err error) {
 // Finds key/value pair whose key is greater than or equal to the
 // given key.
 func (t *tOps) find(f *tFile, key []byte, ro *opt.ReadOptions) (rkey, rvalue []byte, err error) {
-	c, err := t.open(f)
+	ch, err := t.open(f)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer c.Release()
-	return c.Value().(*table.Reader).Find(key, ro)
+	defer ch.Release()
+	return ch.Value().(*table.Reader).Find(key, ro)
 }
 
 // Returns approximate offset of the given key.
 func (t *tOps) offsetOf(f *tFile, key []byte) (offset uint64, err error) {
-	c, err := t.open(f)
+	ch, err := t.open(f)
 	if err != nil {
 		return
 	}
-	_offset, err := c.Value().(*table.Reader).OffsetOf(key)
-	offset = uint64(_offset)
-	c.Release()
-	return
+	defer ch.Release()
+	offset_, err := ch.Value().(*table.Reader).OffsetOf(key)
+	return uint64(offset_), err
 }
 
 // Creates an iterator from the given table.
 func (t *tOps) newIterator(f *tFile, slice *util.Range, ro *opt.ReadOptions) iterator.Iterator {
-	c, err := t.open(f)
+	ch, err := t.open(f)
 	if err != nil {
 		return iterator.NewEmptyIterator(err)
 	}
-	iter := c.Value().(*table.Reader).NewIterator(slice, ro)
-	iter.SetReleaser(c)
+	iter := ch.Value().(*table.Reader).NewIterator(slice, ro)
+	iter.SetReleaser(ch)
 	return iter
 }
 
@@ -391,14 +382,16 @@ func (t *tOps) newIterator(f *tFile, slice *util.Range, ro *opt.ReadOptions) ite
 // no one use the the table.
 func (t *tOps) remove(f *tFile) {
 	num := f.file.Num()
-	t.cacheNS.Delete(num, func(exist bool) {
-		if err := f.file.Remove(); err != nil {
-			t.s.logf("table@remove removing @%d %q", num, err)
-		} else {
-			t.s.logf("table@remove removed @%d", num)
-		}
-		if bc := t.s.o.GetBlockCache(); bc != nil {
-			bc.GetNamespace(num).Zap(false)
+	t.cacheNS.Delete(num, func(exist, pending bool) {
+		if !pending {
+			if err := f.file.Remove(); err != nil {
+				t.s.logf("table@remove removing @%d %q", num, err)
+			} else {
+				t.s.logf("table@remove removed @%d", num)
+			}
+			if bc := t.s.o.GetBlockCache(); bc != nil {
+				bc.ZapNamespace(num)
+			}
 		}
 	})
 }
@@ -406,14 +399,19 @@ func (t *tOps) remove(f *tFile) {
 // Closes the table ops instance. It will close all tables,
 // regadless still used or not.
 func (t *tOps) close() {
-	t.cache.Zap(true)
+	t.cache.Zap()
+	t.bpool.Close()
 }
 
 // Creates new initialized table ops instance.
 func newTableOps(s *session, cacheCap int) *tOps {
 	c := cache.NewLRUCache(cacheCap)
-	ns := c.GetNamespace(0)
-	return &tOps{s, c, ns}
+	return &tOps{
+		s:       s,
+		cache:   c,
+		cacheNS: c.GetNamespace(0),
+		bpool:   util.NewBufferPool(s.o.GetBlockSize() + 5),
+	}
 }
 
 // tWriter wraps the table writer. It keep track of file descriptor

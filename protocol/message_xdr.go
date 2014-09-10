@@ -127,7 +127,7 @@ FileInfo Structure:
 
 
 struct FileInfo {
-	string Name<1024>;
+	string Name<8192>;
 	unsigned int Flags;
 	hyper Modified;
 	unsigned hyper Version;
@@ -154,7 +154,7 @@ func (o FileInfo) AppendXDR(bs []byte) []byte {
 }
 
 func (o FileInfo) encodeXDR(xw *xdr.Writer) (int, error) {
-	if len(o.Name) > 1024 {
+	if len(o.Name) > 8192 {
 		return xw.Tot(), xdr.ErrElementSizeExceeded
 	}
 	xw.WriteString(o.Name)
@@ -184,7 +184,7 @@ func (o *FileInfo) UnmarshalXDR(bs []byte) error {
 }
 
 func (o *FileInfo) decodeXDR(xr *xdr.Reader) error {
-	o.Name = xr.ReadStringMax(1024)
+	o.Name = xr.ReadStringMax(8192)
 	o.Flags = xr.ReadUint32()
 	o.Modified = int64(xr.ReadUint64())
 	o.Version = xr.ReadUint64()
@@ -194,6 +194,98 @@ func (o *FileInfo) decodeXDR(xr *xdr.Reader) error {
 	for i := range o.Blocks {
 		(&o.Blocks[i]).decodeXDR(xr)
 	}
+	return xr.Error()
+}
+
+/*
+
+FileInfoTruncated Structure:
+
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        Length of Name                         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                                                               /
+\                    Name (variable length)                     \
+/                                                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                             Flags                             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
++                      Modified (64 bits)                       +
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
++                       Version (64 bits)                       +
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
++                    Local Version (64 bits)                    +
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                          Num Blocks                           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+
+struct FileInfoTruncated {
+	string Name<8192>;
+	unsigned int Flags;
+	hyper Modified;
+	unsigned hyper Version;
+	unsigned hyper LocalVersion;
+	unsigned int NumBlocks;
+}
+
+*/
+
+func (o FileInfoTruncated) EncodeXDR(w io.Writer) (int, error) {
+	var xw = xdr.NewWriter(w)
+	return o.encodeXDR(xw)
+}
+
+func (o FileInfoTruncated) MarshalXDR() []byte {
+	return o.AppendXDR(make([]byte, 0, 128))
+}
+
+func (o FileInfoTruncated) AppendXDR(bs []byte) []byte {
+	var aw = xdr.AppendWriter(bs)
+	var xw = xdr.NewWriter(&aw)
+	o.encodeXDR(xw)
+	return []byte(aw)
+}
+
+func (o FileInfoTruncated) encodeXDR(xw *xdr.Writer) (int, error) {
+	if len(o.Name) > 8192 {
+		return xw.Tot(), xdr.ErrElementSizeExceeded
+	}
+	xw.WriteString(o.Name)
+	xw.WriteUint32(o.Flags)
+	xw.WriteUint64(uint64(o.Modified))
+	xw.WriteUint64(o.Version)
+	xw.WriteUint64(o.LocalVersion)
+	xw.WriteUint32(o.NumBlocks)
+	return xw.Tot(), xw.Error()
+}
+
+func (o *FileInfoTruncated) DecodeXDR(r io.Reader) error {
+	xr := xdr.NewReader(r)
+	return o.decodeXDR(xr)
+}
+
+func (o *FileInfoTruncated) UnmarshalXDR(bs []byte) error {
+	var br = bytes.NewReader(bs)
+	var xr = xdr.NewReader(br)
+	return o.decodeXDR(xr)
+}
+
+func (o *FileInfoTruncated) decodeXDR(xr *xdr.Reader) error {
+	o.Name = xr.ReadStringMax(8192)
+	o.Flags = xr.ReadUint32()
+	o.Modified = int64(xr.ReadUint64())
+	o.Version = xr.ReadUint64()
+	o.LocalVersion = xr.ReadUint64()
+	o.NumBlocks = xr.ReadUint32()
 	return xr.Error()
 }
 
@@ -292,7 +384,7 @@ RequestMessage Structure:
 
 struct RequestMessage {
 	string Repository<64>;
-	string Name<1024>;
+	string Name<8192>;
 	unsigned hyper Offset;
 	unsigned int Size;
 }
@@ -320,7 +412,7 @@ func (o RequestMessage) encodeXDR(xw *xdr.Writer) (int, error) {
 		return xw.Tot(), xdr.ErrElementSizeExceeded
 	}
 	xw.WriteString(o.Repository)
-	if len(o.Name) > 1024 {
+	if len(o.Name) > 8192 {
 		return xw.Tot(), xdr.ErrElementSizeExceeded
 	}
 	xw.WriteString(o.Name)
@@ -342,7 +434,7 @@ func (o *RequestMessage) UnmarshalXDR(bs []byte) error {
 
 func (o *RequestMessage) decodeXDR(xr *xdr.Reader) error {
 	o.Repository = xr.ReadStringMax(64)
-	o.Name = xr.ReadStringMax(1024)
+	o.Name = xr.ReadStringMax(8192)
 	o.Offset = xr.ReadUint64()
 	o.Size = xr.ReadUint32()
 	return xr.Error()
