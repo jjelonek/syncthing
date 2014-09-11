@@ -299,11 +299,14 @@ func main() {
 		l.Fatalln("Config directory", confDir, "is not a directory")
 	}
 
-	if os.Getenv("STNORESTART") != "" {
-		syncthingMain()
-	} else {
-		monitorMain()
-	}
+	syncthingMain()
+	/*
+		if os.Getenv("STNORESTART") != "" {
+			syncthingMain()
+		} else {
+			monitorMain()
+		}
+	*/
 }
 
 func syncthingMain() {
