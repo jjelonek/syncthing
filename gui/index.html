@@ -13,7 +13,7 @@
   <meta name="author" content="">
   <link rel="shortcut icon" href="img/favicon.png">
 
-  <title>Syncthing | {{thisNodeName()}}</title>
+  <title>Recoded | {{thisNodeName()}}</title>
   <link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
   <link href="font/raleway.css" rel="stylesheet">
   <link href="overrides.css" rel="stylesheet">
@@ -26,8 +26,8 @@
 
   <nav class="navbar navbar-top navbar-default" role="navigation">
     <div class="container">
-      <span class="navbar-brand"><img class="logo" src="img/logo-text-64.png" height="32" width="117"/></span>
-      <p class="navbar-text hidden-xs">{{thisNodeName()}}</p>
+
+      <span class="navbar-brand"><img class="logo" src="recoded-logo-128.png" width="44" height="32" /> Recoded ASync<small class="hidden-xs"> <span class="text-muted">|</span> {{thisNodeName()}}</small></span>
       <ul class="nav navbar-nav navbar-right">
         <li ng-if="upgradeInfo.newer">
           <button type="button" class="btn navbar-btn btn-primary btn-sm" href="" ng-click="upgrade()">
@@ -60,7 +60,7 @@
         <div class="panel panel-warning">
           <div class="panel-heading"><h3 translate class="panel-title">Restart Needed</h3></div>
           <div class="panel-body">
-            <p translate>The configuration has been saved but not activated. Syncthing must restart to activate the new configuration.</p>
+            <p translate>The configuration has been saved but not activated. ASync must restart to activate the new configuration.</p>
           </div>
           <div class="panel-footer">
             <button type="button" class="btn btn-sm btn-default pull-right" ng-click="restart()"><span class="glyphicon glyphicon-refresh"></span>&emsp;<span translate>Restart</span></button>
@@ -305,11 +305,7 @@
   <nav class="navbar navbar-default navbar-fixed-bottom hidden-xs">
     <div class="container">
       <ul class="nav navbar-nav">
-        <li><a class="navbar-link" href="http://discourse.syncthing.net/"><span translate>Support / Forum</span></a></li>
-        <li><a class="navbar-link" href="https://github.com/syncthing/syncthing/releases"><span translate>Latest Release</span></a></li>
-        <li><a class="navbar-link" href="http://discourse.syncthing.net/category/documentation"><span translate>Documentation</span></a></li>
-        <li><a class="navbar-link" href="https://github.com/syncthing/syncthing/issues"><span translate>Bugs</span></a></li>
-        <li><a class="navbar-link" href="https://github.com/syncthing/syncthing"><span translate>Source Code</span></a></li>
+        <li><a class="navbar-link" href="http://recoded.co/"><span translate>Recoded.co - Copyright 2014</span></a></li>
       </ul>
     </div>
   </nav>
@@ -318,7 +314,7 @@
 
   <modal id="networkError" status="danger" icon="exclamation-sign" title="{{'Connection Error' | translate}}">
     <p translate>
-      Syncthing seems to be down, or there is a problem with your Internet connection. Retrying&hellip;
+      ASync seems to be down, or there is a problem with your Internet connection. Retrying&hellip;
     </p>
   </modal>
 
@@ -337,7 +333,7 @@
   <!-- Shutdown modal -->
 
   <modal id="shutdown" icon="off" status="success" title="Shutdown Complete">
-    <p translate>Syncthing has been shut down.</p>
+    <p translate>ASync has been shut down.</p>
   </modal>
 
   <!-- ID modal -->
@@ -484,6 +480,7 @@
                       <input type="radio" ng-model="currentRepo.FileVersioningSelector" value="staggered"> <span translate>Staggered File Versioning</span>
                     </label>
                   </div>
+                  <p translate class="help-block">Files are moved to date stamped versions in a .stversions folder when replaced or deleted by ASync.</p>
                 </div>
                 <div class="form-group" ng-if="currentRepo.FileVersioningSelector=='simple'" ng-class="{'has-error': repoEditor.simpleKeep.$invalid && repoEditor.simpleKeep.$dirty}">
                   <p translate class="help-block">Files are moved to date stamped versions in a .stversions folder when replaced or deleted by syncthing.</p>
@@ -673,10 +670,10 @@
   <!-- About modal -->
 
   <modal id="about" large="yes" close="yes" status="info" title="About">
-    <h1 class="text-center"><img alt="Syncthing" title="Syncthing" src="img/logo-text-256.png" style="vertical-align: -16px" height="100" width="366"/><br/><small>{{version}}</small></h1>
-    <hr/>
 
-    <p translate>Copyright &copy; 2014 Jakob Borg and the following Contributors:</p>
+    <h1 class="text-center"><img src="st-logo-128.png" style="vertical-align: -16px" width="64" height="64"/> ASync<br/><small>{{version}}</small></h1>
+    <hr/>
+	<p translate>ASync has been built on Syncthing project. Syncthing is an open source project made by Jakob Borg and the following Contributors:</p>
     <div class="row">
       <div class="col-md-6">
         <ul>
@@ -705,7 +702,7 @@
     </div>
     <hr/>
 
-    <p translate>Syncthing includes the following software or portions thereof:</p>
+    <p translate>This project includes the following software or portions thereof:</p>
     <ul>
       <li><a href="http://golang.org/">The Go Programming Language</a>, Copyright &copy; 2012 The Go Authors.</li>
       <li><a href="https://bitbucket.org/kardianos/osext">kardianos/osext</a>, Copyright &copy; 2012 Daniel Theophanes.</li>
