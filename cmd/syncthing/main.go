@@ -650,7 +650,7 @@ nextRepo:
 		}()
 	}
 
-	go standbyMonitor()
+	//go standbyMonitor()
 
 	events.Default.Log(events.StartupComplete, nil)
 	go generateEvents()
