@@ -60,6 +60,7 @@ const (
 	exitError              = 1
 	exitNoUpgradeAvailable = 2
 	exitRestarting         = 3
+	exitUpgrading          = 4
 )
 
 var l = logger.DefaultLogger
@@ -650,7 +651,11 @@ nextRepo:
 		}()
 	}
 
-	//go standbyMonitor()
+	/*
+		if cfg.Options.RestartOnWakeup {
+			go standbyMonitor()
+		}
+	*/
 
 	events.Default.Log(events.StartupComplete, nil)
 	go generateEvents()
@@ -1177,12 +1182,20 @@ func overrideGUIConfig(originalCfg config.GUIConfiguration, address, authenticat
 }
 
 func standbyMonitor() {
+	restartDelay := time.Duration(60 * time.Second)
 	now := time.Now()
 	for {
 		time.Sleep(10 * time.Second)
 		if time.Since(now) > 2*time.Minute {
-			l.Infoln("Paused state detected, possibly woke up from standby.")
+			l.Infoln("Paused state detected, possibly woke up from standby. Restarting in", restartDelay)
+
+			// We most likely just woke from standby. If we restart
+			// immediately chances are we won't have networking ready. Give
+			// things a moment to stabilize.
+			time.Sleep(restartDelay)
+
 			restart()
+			return
 		}
 		now = time.Now()
 	}

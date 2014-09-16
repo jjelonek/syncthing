@@ -91,6 +91,21 @@ func monitorMain() {
 			if err == nil {
 				// Successfull exit indicates an intentional shutdown
 				return
+			} else if exiterr, ok := err.(*exec.ExitError); ok {
+				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+					switch status.ExitStatus() {
+					case exitUpgrading:
+						// Restart the monitor process to release the .old
+						// binary as part of the upgrade process.
+						l.Infoln("Restarting monitor...")
+						os.Setenv("STNORESTART", "")
+						err := exec.Command(args[0], args[1:]...).Start()
+						if err != nil {
+							l.Warnln("restart:", err)
+						}
+						return
+					}
+				}
 			}
 		}
 
@@ -124,7 +139,7 @@ func copyStderr(stderr io.ReadCloser) {
 				}
 
 				l.Warnf("Panic detected, writing to \"%s\"", panicFd.Name())
-				l.Warnln("Please create an issue at https://github.com/syncting/syncthing/issues/ with the panic log attached")
+				l.Warnln("Please create an issue at https://github.com/syncthing/syncthing/issues/ with the panic log attached")
 
 				panicFd.WriteString("Panic at " + time.Now().Format(time.RFC1123) + "\n")
 				stdoutMut.Lock()

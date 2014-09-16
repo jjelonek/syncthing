@@ -153,13 +153,17 @@ syncthing.controller('SyncthingCtrl', function ($scope, $http, $translate, $loca
             return;
         }
 
-        console.log('UIOnline');
-        $scope.init();
-        online = true;
-        restarting = false;
-        $('#networkError').modal('hide');
-        $('#restarting').modal('hide');
-        $('#shutdown').modal('hide');
+        if (restarting){
+            document.location.reload(true);
+        } else {
+            console.log('UIOnline');
+            $scope.init();
+            online = true;
+            restarting = false;
+            $('#networkError').modal('hide');
+            $('#restarting').modal('hide');
+            $('#shutdown').modal('hide');
+        }
     });
 
     $scope.$on('UIOffline', function (event, arg) {
@@ -371,6 +375,10 @@ syncthing.controller('SyncthingCtrl', function ($scope, $http, $translate, $loca
     var refreshNodeStats = debounce(function () {
         $http.get(urlbase+"/stats/node").success(function (data) {
             $scope.stats = data;
+            for (var node in $scope.stats) {
+                $scope.stats[node].LastSeen = new Date($scope.stats[node].LastSeen);
+                $scope.stats[node].LastSeenDays = (new Date() - $scope.stats[node].LastSeen) / 1000 / 86400;
+            }
             console.log("refreshNodeStats", data);
         });
     }, 500);
@@ -581,7 +589,7 @@ syncthing.controller('SyncthingCtrl', function ($scope, $http, $translate, $loca
 
             setTimeout(function(){
                 window.location.protocol = protocol;
-            }, 1000);
+            }, 2500);
 
             $scope.protocolChanged = false;
         }
@@ -838,6 +846,13 @@ syncthing.controller('SyncthingCtrl', function ($scope, $http, $translate, $loca
     $scope.setAPIKey = function (cfg) {
         cfg.APIKey = randomString(30, 32);
     };
+
+    $scope.showURPreview = function () {
+        $('#settings').modal('hide');
+        $('#urPreview').modal().on('hidden.bs.modal', function () {
+            $('#settings').modal();
+        });
+    }
 
     $scope.acceptUR = function () {
         $scope.config.Options.URAccepted = 1000; // Larger than the largest existing report version

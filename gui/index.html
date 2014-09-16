@@ -165,6 +165,8 @@
           </div>
         </div>
         <button class="btn btn-sm btn-default pull-right" ng-click="addRepo()"><span class="glyphicon glyphicon-plus"></span>&emsp;<span translate>Add Repository</span></button>
+        <div class="clearfix"></div>
+        <hr class="visible-sm"/>
       </div>
 
       <!-- Node list (top right) -->
@@ -219,8 +221,8 @@
 
         <div class="panel-group" id="nodes">
           <div class="panel panel-{{nodeClass(nodeCfg)}}" ng-repeat="nodeCfg in otherNodes()">
-            <div class="panel-heading">
-              <h3 class="panel-title" data-toggle="collapse" data-parent="#nodes" href="#node-{{$index}}" style="cursor: pointer">
+            <div class="panel-heading" data-toggle="collapse" data-parent="#nodes" href="#node-{{$index}}" style="cursor: pointer">
+              <h3 class="panel-title">
                 <span class="glyphicon glyphicon-retweet"></span>&emsp;{{nodeName(nodeCfg)}}
                 <span class="pull-right hidden-xs">
                   <span ng-if="connections[nodeCfg.NodeID] && completion[nodeCfg.NodeID]._total == 100">
@@ -264,8 +266,8 @@
                     </tr>
                     <tr ng-if="!connections[nodeCfg.NodeID]">
                       <th><span class="glyphicon glyphicon-eye-open"></span>&emsp;<span translate>Last seen</span></th>
-                      <td translate ng-if="stats[nodeCfg.NodeID].LastSeen.indexOf('1970') > -1" class="text-right">Never</td>
-                      <td ng-if="stats[nodeCfg.NodeID].LastSeen.indexOf('1970') < 0" class="text-right">{{stats[nodeCfg.NodeID].LastSeen | date:"yyyy-MM-dd HH:mm"}}</td>
+                      <td translate ng-if="!stats[nodeCfg.NodeID].LastSeenDays || stats[nodeCfg.NodeID].LastSeenDays >= 365" class="text-right">Never</td>
+                      <td ng-if="stats[nodeCfg.NodeID].LastSeenDays < 365" class="text-right">{{stats[nodeCfg.NodeID].LastSeen | date:"yyyy-MM-dd HH:mm"}}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -278,6 +280,7 @@
           </div>
         </div>
         <button class="btn btn-sm btn-default pull-right" ng-click="addNode()"><span class="glyphicon glyphicon-plus"></span>&emsp;<span translate>Add Node</span></button>
+        <div class="clearfix"></div>
       </div>
     </div> <!-- /row -->
 
@@ -608,7 +611,7 @@
                 <div class="form-group">
                   <div class="checkbox">
                     <label>
-                      <span translate>Anonymous Usage Reporting</span> <input id="UREnabled" type="checkbox" ng-model="tmpOptions.UREnabled">
+                      <span translate>Anonymous Usage Reporting</span> <input id="UREnabled" type="checkbox" ng-model="tmpOptions.UREnabled"> (<a translate ng-click="showURPreview()" href="#">Preview</a>)
                     </label>
                   </div>
                 </div>
@@ -650,6 +653,26 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-success btn-sm" ng-click="acceptUR()"><span class="glyphicon glyphicon-ok"></span>&emsp;<span translate>Yes</span></button>
           <button type="button" class="btn btn-danger btn-sm" ng-click="declineUR()"><span class="glyphicon glyphicon-remove"></span>&emsp;<span translate>No</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Usage report preview modal -->
+
+  <div id="urPreview" class="modal fade" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header alert alert-success">
+          <h4 translate class="modal-title">Anonymous Usage Reporting</h4>
+        </div>
+        <div class="modal-body">
+          <p translate>The encrypted usage report is sent daily. It is used to track common platforms, repo sizes and app versions. If the reported data set is changed you will be prompted with this dialog again.</p>
+          <p translate translate-value-url="https://data.syncthing.net">The aggregated statistics are publicly available at {%url%}.</p>
+          <pre><small>{{reportData | json}}</small></pre>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success btn-sm" data-dismiss="modal"><span class="glyphicon glyphicon-ok"></span>&emsp;<span translate>OK</span></button>
         </div>
       </div>
     </div>

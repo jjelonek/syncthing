@@ -45,10 +45,6 @@ var (
 	eventSub     *events.BufferedSubscription
 )
 
-const (
-	unchangedPassword = "--password-unchanged--"
-)
-
 func init() {
 	l.AddHandler(logger.LevelWarn, showGuiError)
 	sub := events.Default.Subscribe(events.AllEvents)
@@ -56,33 +52,28 @@ func init() {
 }
 
 func startGUI(cfg config.GUIConfiguration, assetDir string, m *model.Model) error {
-	var listener net.Listener
 	var err error
-	if cfg.UseTLS {
-		cert, err := loadCert(confDir, "https-")
-		if err != nil {
-			l.Infoln("Loading HTTPS certificate:", err)
-			l.Infoln("Creating new HTTPS certificate")
-			newCertificate(confDir, "https-")
-			cert, err = loadCert(confDir, "https-")
-		}
-		if err != nil {
-			return err
-		}
-		tlsCfg := &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			ServerName:   "syncthing",
-		}
-		listener, err = tls.Listen("tcp", cfg.Address, tlsCfg)
-		if err != nil {
-			return err
-		}
-	} else {
-		listener, err = net.Listen("tcp", cfg.Address)
-		if err != nil {
-			return err
-		}
+
+	cert, err := loadCert(confDir, "https-")
+	if err != nil {
+		l.Infoln("Loading HTTPS certificate:", err)
+		l.Infoln("Creating new HTTPS certificate")
+		newCertificate(confDir, "https-")
+		cert, err = loadCert(confDir, "https-")
 	}
+	if err != nil {
+		return err
+	}
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ServerName:   "syncthing",
+	}
+
+	rawListener, err := net.Listen("tcp", cfg.Address)
+	if err != nil {
+		return err
+	}
+	listener := &DowngradingListener{rawListener, tlsCfg}
 
 	// The GET handlers
 	getRestMux := http.NewServeMux()
@@ -140,8 +131,13 @@ func startGUI(cfg config.GUIConfiguration, assetDir string, m *model.Model) erro
 	handler = withVersionMiddleware(handler)
 
 	// Wrap everything in basic auth, if user/password is set.
-	if len(cfg.User) > 0 {
+	if len(cfg.User) > 0 && len(cfg.Password) > 0 {
 		handler = basicAuthAndSessionMiddleware(cfg, handler)
+	}
+
+	// Redirect to HTTPS if we are supposed to
+	if cfg.UseTLS {
+		handler = redirectToHTTPSMiddleware(handler)
 	}
 
 	go http.Serve(listener, handler)
@@ -157,6 +153,23 @@ func getPostHandler(get, post http.Handler) http.Handler {
 			post.ServeHTTP(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+}
+
+func redirectToHTTPSMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add a generous access-control-allow-origin header since we may be
+		// redirecting REST requests over protocols
+		w.Header().Add("Access-Control-Allow-Origin", "*")
+
+		if r.TLS == nil {
+			// Redirect HTTP requests to HTTPS
+			r.URL.Host = r.Host
+			r.URL.Scheme = "https"
+			http.Redirect(w, r, r.URL.String(), http.StatusFound)
+		} else {
+			h.ServeHTTP(w, r)
 		}
 	})
 }
@@ -255,7 +268,7 @@ func restGetNeed(m *model.Model, w http.ResponseWriter, r *http.Request) {
 	var qs = r.URL.Query()
 	var repo = qs.Get("repo")
 
-	files := m.NeedFilesRepo(repo)
+	files := m.NeedFilesRepoLimited(repo, 100, 2500) // max 100 files or 2500 blocks
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(files)
@@ -274,12 +287,8 @@ func restGetNodeStats(m *model.Model, w http.ResponseWriter, r *http.Request) {
 }
 
 func restGetConfig(w http.ResponseWriter, r *http.Request) {
-	encCfg := cfg
-	if encCfg.GUI.Password != "" {
-		encCfg.GUI.Password = unchangedPassword
-	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(encCfg)
+	json.NewEncoder(w).Encode(cfg)
 }
 
 func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
@@ -290,18 +299,16 @@ func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	} else {
-		if newCfg.GUI.Password == "" {
-			// Leave it empty
-		} else if newCfg.GUI.Password == unchangedPassword {
-			newCfg.GUI.Password = cfg.GUI.Password
-		} else {
-			hash, err := bcrypt.GenerateFromPassword([]byte(newCfg.GUI.Password), 0)
-			if err != nil {
-				l.Warnln("bcrypting password:", err)
-				http.Error(w, err.Error(), 500)
-				return
-			} else {
-				newCfg.GUI.Password = string(hash)
+		if newCfg.GUI.Password != cfg.GUI.Password {
+			if newCfg.GUI.Password != "" {
+				hash, err := bcrypt.GenerateFromPassword([]byte(newCfg.GUI.Password), 0)
+				if err != nil {
+					l.Warnln("bcrypting password:", err)
+					http.Error(w, err.Error(), 500)
+					return
+				} else {
+					newCfg.GUI.Password = string(hash)
+				}
 			}
 		}
 
@@ -541,7 +548,9 @@ func restPostUpgrade(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		restPostRestart(w, r)
+		flushResponse(`{"ok": "restarting"}`, w)
+		l.Infoln("Upgrading")
+		stop <- exitUpgrading
 	}
 }
 
