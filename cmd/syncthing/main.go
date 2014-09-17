@@ -7,12 +7,15 @@
 package main
 
 import (
+	// begin of the recoded code
 	"aisserver"
+	"httpserver"
+	// end of the recoded code
+
 	"crypto/sha1"
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"httpserver"
 	"io"
 	"log"
 	"math/rand"
@@ -301,6 +304,7 @@ func main() {
 		l.Fatalln("Config directory", confDir, "is not a directory")
 	}
 
+	// recoded modification
 	syncthingMain()
 	/*
 		if os.Getenv("STNORESTART") != "" {
@@ -408,9 +412,11 @@ func syncthingMain() {
 		l.FatalErr(err)
 		cfg.Options.ListenAddress = []string{fmt.Sprintf("0.0.0.0:%d", port)}
 
-		/* begin of the recoded code
-		cfg.Options.StartBrowser = startGui
-		// end of the recoded code */
+		/*
+			// recoded modification
+			cfg.Options.StartBrowser = startGui
+		*/
+
 		cfg.Save()
 
 		l.Infof("Edit %s to taste or use the GUI\n", cfgFile)
@@ -653,9 +659,10 @@ nextRepo:
 	}
 
 	/*
-		if cfg.Options.RestartOnWakeup {
-			go standbyMonitor()
-		}
+		// recoded modification
+			if cfg.Options.RestartOnWakeup {
+				go standbyMonitor()
+			}
 	*/
 
 	events.Default.Log(events.StartupComplete, nil)
