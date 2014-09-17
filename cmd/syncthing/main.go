@@ -191,7 +191,7 @@ func main() {
 	flag.Usage = usageFor(flag.CommandLine, usage, extraUsage)
 
 	// begin of the recoded code
-	var portInId, portOutId, shipId int
+	var portInId, portOutId, shipId, downSamplingWindow int
 	var srcDir, serverAddress string
 	var shipMode, startGui bool
 	var serverToken string
@@ -203,6 +203,7 @@ func main() {
 	flag.BoolVar(&startGui, "gui", false, "flag for browser GUI interface")
 	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
 	flag.StringVar(&serverToken, "token", "123456789", "remote server token")
+	flag.IntVar(&downSamplingWindow, "sampling", 5, "downsampling window in minutes")
 	flag.Parse()
 	noBrowser = !startGui
 	if srcDir == "" {
@@ -226,7 +227,7 @@ func main() {
 		os.Exit(0)
 	}
 	if shipMode {
-		go aisserver.Start(serverAddress, portOutId, portInId, srcDir, shipId, startGui)
+		go aisserver.Start(serverAddress, portOutId, portInId, srcDir, shipId, downSamplingWindow, startGui)
 	} else {
 		go httpserver.Start(serverAddress, portOutId, portInId, srcDir, serverToken, startGui)
 	}
