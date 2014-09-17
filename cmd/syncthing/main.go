@@ -203,7 +203,7 @@ func main() {
 	flag.BoolVar(&startGui, "gui", false, "flag for browser GUI interface")
 	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
 	flag.StringVar(&serverToken, "token", "123456789", "remote server token")
-	flag.IntVar(&downSamplingWindow, "sampling", 5, "downsampling window in minutes")
+	flag.IntVar(&downSamplingWindow, "sampling", 300, "downsampling window in seconds")
 	flag.Parse()
 	noBrowser = !startGui
 	if srcDir == "" {
