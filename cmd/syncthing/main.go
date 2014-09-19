@@ -194,29 +194,13 @@ func main() {
 	flag.Usage = usageFor(flag.CommandLine, usage, extraUsage)
 
 	// begin of the recoded code
-	var portInId, portOutId, shipId, downSamplingWindow int
-	var srcDir, serverAddress, globalDiscoveryServer string
-	var shipMode, startGui bool
-	var serverToken string
-	flag.IntVar(&portInId, "port_in", 12344, "local server port")
-	flag.IntVar(&portOutId, "port_out", 12345, "remote server port")
-	flag.StringVar(&serverAddress, "server", "0.0.0.0", "remote server address")
+	var (
+		shipId   int
+		shipMode bool
+		srcDir   string
+	)
 	flag.IntVar(&shipId, "ship", -1, "ship id - a number [0..999]")
-	flag.IntVar(&aisserver.LogInterval, "log", 5, "log interval in minutes")
-	flag.BoolVar(&startGui, "gui", false, "flag for browser GUI interface")
-	flag.StringVar(&srcDir, "dir", "", "path to sync folders ship_[nnn], where nnn - ship id")
-	flag.StringVar(&serverToken, "token", "123456789", "remote server token")
-	flag.IntVar(&downSamplingWindow, "sampling", 300, "downsampling window in seconds")
-	flag.StringVar(&globalDiscoveryServer, "gds", "", "global discovery server [address:port]")
 	flag.Parse()
-	noBrowser = !startGui
-	if srcDir == "" {
-		fmt.Println("-dir parameter (a path to sync folders) is required")
-		os.Exit(0)
-	} else {
-		srcDir, _ = filepath.Abs(srcDir)
-		confDir = srcDir + httpserver.SyncConfigDir
-	}
 	if shipId == -1 {
 		shipMode = false
 	} else {
@@ -226,23 +210,17 @@ func main() {
 			return
 		}
 	}
-	if serverAddress == "" {
-		fmt.Println("-server parameter is required")
-		os.Exit(0)
-	}
-	if globalDiscoveryServer == "" {
-		if shipMode {
-			globalDiscoveryServer = serverAddress + ":22026"
-		} else {
-			globalDiscoveryServer = "localhost:22026"
-		}
-	}
-	fmt.Printf("[Bibby] global discovery server: %q\n", globalDiscoveryServer)
+	cfg := httpserver.ReadConfigFile()
+	noBrowser = !cfg.StartGui
 	if shipMode {
-		go aisserver.Start(serverAddress, portOutId, portInId, srcDir, shipId, downSamplingWindow, globalDiscoveryServer, startGui)
+		srcDir = cfg.Ship.Dir
+		go aisserver.Start(shipId)
 	} else {
-		go httpserver.Start(serverAddress, portOutId, portInId, srcDir, serverToken, globalDiscoveryServer, startGui)
+		srcDir = cfg.Server.Dir
+		go httpserver.Start()
 	}
+	srcDir, _ = filepath.Abs(srcDir)
+	confDir = srcDir + httpserver.SyncConfigDir
 	// end of the recoded code
 
 	if showVersion {
