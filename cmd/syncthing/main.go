@@ -9,6 +9,7 @@ package main
 import (
 	// begin of the recoded code
 	"aisserver"
+	"common"
 	"httpserver"
 	// end of the recoded code
 
@@ -210,7 +211,7 @@ func main() {
 			return
 		}
 	}
-	cfg := httpserver.ReadConfigFile()
+	cfg := common.ReadConfigFile()
 	noBrowser = !cfg.StartGui
 	if shipMode {
 		srcDir = cfg.Ship.Dir
@@ -220,7 +221,7 @@ func main() {
 		go httpserver.Start()
 	}
 	srcDir, _ = filepath.Abs(srcDir)
-	confDir = srcDir + httpserver.SyncConfigDir
+	confDir = srcDir + common.SyncConfigDir
 	// end of the recoded code
 
 	if showVersion {
