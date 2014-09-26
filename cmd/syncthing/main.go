@@ -215,10 +215,10 @@ func main() {
 	noBrowser = !cfg.StartGui
 	if shipMode {
 		srcDir = cfg.Ship.Dir
-		go aisserver.Start(shipId)
+		go aisserver.Start(cfg, shipId)
 	} else {
 		srcDir = cfg.Server.Dir
-		go httpserver.Start()
+		go httpserver.Start(cfg)
 	}
 	srcDir, _ = filepath.Abs(srcDir)
 	confDir = srcDir + common.SyncConfigDir
