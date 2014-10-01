@@ -94,7 +94,7 @@ func sendUsageReport(m *model.Model) error {
 }
 
 func usageReportingLoop(m *model.Model) {
-	l.Infoln("Starting usage reporting")
+	l.Infoln(logPrefix, "Starting usage reporting")
 	t := time.NewTicker(86400 * time.Second)
 loop:
 	for {
@@ -104,11 +104,11 @@ loop:
 		case <-t.C:
 			err := sendUsageReport(m)
 			if err != nil {
-				l.Infoln("Usage report:", err)
+				l.Infoln(logPrefix, "Usage report:", err)
 			}
 		}
 	}
-	l.Infoln("Stopping usage reporting")
+	l.Infoln(logPrefix, "Stopping usage reporting")
 }
 
 func stopUsageReporting() {

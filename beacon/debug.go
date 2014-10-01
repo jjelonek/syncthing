@@ -12,6 +12,7 @@ import (
 )
 
 var (
-	debug = strings.Contains(os.Getenv("STTRACE"), "beacon") || os.Getenv("STTRACE") == "all"
-	l     = logger.DefaultLogger
+	debug     = strings.Contains(os.Getenv("STTRACE"), "beacon") || os.Getenv("STTRACE") == "all"
+	l         = logger.DefaultLogger
+	logPrefix = logger.LogPrefix
 )

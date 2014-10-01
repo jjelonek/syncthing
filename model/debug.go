@@ -5,6 +5,7 @@
 package model
 
 import (
+	"log"
 	"os"
 	"strings"
 
@@ -12,6 +13,15 @@ import (
 )
 
 var (
-	debug = strings.Contains(os.Getenv("STTRACE"), "model") || os.Getenv("STTRACE") == "all"
-	l     = logger.DefaultLogger
+	debug     = strings.Contains(os.Getenv("STTRACE"), "model") || os.Getenv("STTRACE") == "all"
+	l         = logger.DefaultLogger
+	logPrefix string
 )
+
+func SetPrefix(prefix string) {
+	logPrefix = prefix
+}
+
+func SetLogger(val *log.Logger) {
+	l.Set(val)
+}

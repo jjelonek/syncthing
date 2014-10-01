@@ -72,10 +72,10 @@ func (b *Broadcast) writer() {
 			_, err := b.conn.WriteTo(bs, dst)
 			if err != nil {
 				if debug {
-					l.Debugln(err)
+					l.Debugln(logPrefix, err)
 				}
 			} else if debug {
-				l.Debugf("sent %d bytes to %s", len(bs), dst)
+				l.Debugf(logPrefix, "sent %d bytes to %s", len(bs), dst)
 			}
 		}
 	}

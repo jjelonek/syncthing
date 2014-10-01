@@ -58,10 +58,10 @@ func (b *Multicast) writer() {
 				_, err = b.conn.WriteTo(bs, &addr)
 				if err != nil {
 					if debug {
-						l.Debugln(err, "on write to", addr)
+						l.Debugln(logPrefix, err, "on write to", addr)
 					}
 				} else if debug {
-					l.Debugf("sent %d bytes to %s", len(bs), addr.String())
+					l.Debugf("", "sent %d bytes to %s", len(bs), addr.String())
 				}
 			}
 		}

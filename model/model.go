@@ -243,7 +243,7 @@ func (m *Model) Completion(node protocol.NodeID, repo string) float64 {
 
 	res := 100 * (1 - float64(need)/float64(tot))
 	if debug {
-		l.Debugf("Completion(%s, %q): %f (%d / %d)", node, repo, res, need, tot)
+		l.Debugf(logPrefix, "Completion(%s, %q): %f (%d / %d)", node, repo, res, need, tot)
 	}
 
 	return res
@@ -347,7 +347,7 @@ func (m *Model) NeedFilesRepoLimited(repo string, maxFiles, maxBlocks int) []pro
 // Implements the protocol.Model interface.
 func (m *Model) Index(nodeID protocol.NodeID, repo string, fs []protocol.FileInfo) {
 	if debug {
-		l.Debugf("IDX(in): %s %q: %d files", nodeID, repo, len(fs))
+		l.Debugf(logPrefix, "IDX(in): %s %q: %d files", nodeID, repo, len(fs))
 	}
 
 	if !m.repoSharedWith(repo, nodeID) {
@@ -392,11 +392,11 @@ func (m *Model) Index(nodeID protocol.NodeID, repo string, fs []protocol.FileInf
 // Implements the protocol.Model interface.
 func (m *Model) IndexUpdate(nodeID protocol.NodeID, repo string, fs []protocol.FileInfo) {
 	if debug {
-		l.Debugf("IDXUP(in): %s / %q: %d files", nodeID, repo, len(fs))
+		l.Debugf(logPrefix, "IDXUP(in): %s / %q: %d files", nodeID, repo, len(fs))
 	}
 
 	if !m.repoSharedWith(repo, nodeID) {
-		l.Infof("Update for unexpected repository ID %q sent from node %q; ensure that the repository exists and that this node is selected under \"Share With\" in the repository configuration.", repo, nodeID)
+		l.Infof(logPrefix, "Update for unexpected repository ID %q sent from node %q; ensure that the repository exists and that this node is selected under \"Share With\" in the repository configuration.", repo, nodeID)
 		return
 	}
 
@@ -449,10 +449,10 @@ func (m *Model) ClusterConfig(nodeID protocol.NodeID, config protocol.ClusterCon
 	}
 	m.pmut.Unlock()
 
-	l.Infof(`Node %s client is "%s %s"`, nodeID, config.ClientName, config.ClientVersion)
+	l.Infof(logPrefix, "Node %s client is \"%s %s\"", nodeID, config.ClientName, config.ClientVersion)
 
 	if name := config.GetOption("name"); name != "" {
-		l.Infof("Node %s hostname is %q", nodeID, name)
+		l.Infof(logPrefix, "Node %s hostname is %q", nodeID, name)
 		node := m.cfg.GetNodeConfiguration(nodeID)
 		if node != nil && node.Name == "" {
 			node.Name = name
@@ -464,7 +464,7 @@ func (m *Model) ClusterConfig(nodeID protocol.NodeID, config protocol.ClusterCon
 // Close removes the peer from the model and closes the underlying connection if possible.
 // Implements the protocol.Model interface.
 func (m *Model) Close(node protocol.NodeID, err error) {
-	l.Infof("Connection to %s closed: %v", node, err)
+	l.Infof(logPrefix, "Connection to %s closed: %v", node, err)
 	events.Default.Log(events.NodeDisconnected, map[string]string{
 		"id":    node.String(),
 		"error": err.Error(),
@@ -503,27 +503,27 @@ func (m *Model) Request(nodeID protocol.NodeID, repo, name string, offset int64,
 	m.rmut.RUnlock()
 
 	if !ok {
-		l.Warnf("Request from %s for file %s in nonexistent repo %q", nodeID, name, repo)
+		l.Warnf(logPrefix, "Request from %s for file %s in nonexistent repo %q", nodeID, name, repo)
 		return nil, ErrNoSuchFile
 	}
 
 	lf := r.Get(protocol.LocalNodeID, name)
 	if protocol.IsInvalid(lf.Flags) || protocol.IsDeleted(lf.Flags) {
 		if debug {
-			l.Debugf("REQ(in): %s: %q / %q o=%d s=%d; invalid: %v", nodeID, repo, name, offset, size, lf)
+			l.Debugf(logPrefix, "REQ(in): %s: %q / %q o=%d s=%d; invalid: %v", nodeID, repo, name, offset, size, lf)
 		}
 		return nil, ErrInvalid
 	}
 
 	if offset > lf.Size() {
 		if debug {
-			l.Debugf("REQ(in; nonexistent): %s: %q o=%d s=%d", nodeID, name, offset, size)
+			l.Debugf(logPrefix, "REQ(in; nonexistent): %s: %q o=%d s=%d", nodeID, name, offset, size)
 		}
 		return nil, ErrNoSuchFile
 	}
 
 	if debug && nodeID != protocol.LocalNodeID {
-		l.Debugf("REQ(in): %s: %q / %q o=%d s=%d", nodeID, repo, name, offset, size)
+		l.Debugf(logPrefix, "REQ(in): %s: %q / %q o=%d s=%d", nodeID, repo, name, offset, size)
 	}
 	m.rmut.RLock()
 	fn := filepath.Join(m.repoCfgs[repo].Directory, name)
@@ -614,7 +614,7 @@ func (m *Model) AddConnection(rawConn io.Closer, protoConn protocol.Connection) 
 	if statRef, ok := m.nodeStatRefs[nodeID]; ok {
 		statRef.WasSeen()
 	} else {
-		l.Warnf("AddConnection for unconfigured node %v?", nodeID)
+		l.Warnf(logPrefix, "AddConnection for unconfigured node %v?", nodeID)
 	}
 	m.rmut.RUnlock()
 	m.pmut.Unlock()
@@ -626,12 +626,12 @@ func sendIndexes(conn protocol.Connection, repo string, fs *files.Set, ignores i
 	var err error
 
 	if debug {
-		l.Debugf("sendIndexes for %s-%s@/%q starting", nodeID, name, repo)
+		l.Debugf(logPrefix, "sendIndexes for %s-%s@/%q starting", nodeID, name, repo)
 	}
 
 	defer func() {
 		if debug {
-			l.Debugf("sendIndexes for %s-%s@/%q exiting: %v", nodeID, name, repo, err)
+			l.Debugf(logPrefix, "sendIndexes for %s-%s@/%q exiting: %v", nodeID, name, repo, err)
 		}
 	}()
 
@@ -675,7 +675,7 @@ func sendIndexTo(initial bool, minLocalVer uint64, conn protocol.Connection, rep
 					return false
 				}
 				if debug {
-					l.Debugf("sendIndexes for %s-%s/%q: %d files (<%d bytes) (initial index)", nodeID, name, repo, len(batch), currentBatchSize)
+					l.Debugf(logPrefix, "sendIndexes for %s-%s/%q: %d files (<%d bytes) (initial index)", nodeID, name, repo, len(batch), currentBatchSize)
 				}
 				initial = false
 			} else {
@@ -683,7 +683,7 @@ func sendIndexTo(initial bool, minLocalVer uint64, conn protocol.Connection, rep
 					return false
 				}
 				if debug {
-					l.Debugf("sendIndexes for %s-%s/%q: %d files (<%d bytes) (batched update)", nodeID, name, repo, len(batch), currentBatchSize)
+					l.Debugf(logPrefix, "sendIndexes for %s-%s/%q: %d files (<%d bytes) (batched update)", nodeID, name, repo, len(batch), currentBatchSize)
 				}
 			}
 
@@ -699,12 +699,12 @@ func sendIndexTo(initial bool, minLocalVer uint64, conn protocol.Connection, rep
 	if initial && err == nil {
 		err = conn.Index(repo, batch)
 		if debug && err == nil {
-			l.Debugf("sendIndexes for %s-%s/%q: %d files (small initial index)", nodeID, name, repo, len(batch))
+			l.Debugf(logPrefix, "sendIndexes for %s-%s/%q: %d files (small initial index)", nodeID, name, repo, len(batch))
 		}
 	} else if len(batch) > 0 && err == nil {
 		err = conn.IndexUpdate(repo, batch)
 		if debug && err == nil {
-			l.Debugf("sendIndexes for %s-%s/%q: %d files (last batch)", nodeID, name, repo, len(batch))
+			l.Debugf(logPrefix, "sendIndexes for %s-%s/%q: %d files (last batch)", nodeID, name, repo, len(batch))
 		}
 	}
 
@@ -735,7 +735,7 @@ func (m *Model) requestGlobal(nodeID protocol.NodeID, repo, name string, offset 
 	}
 
 	if debug {
-		l.Debugf("REQ(out): %s: %q / %q o=%d s=%d h=%x", nodeID, repo, name, offset, size, hash)
+		l.Debugf(logPrefix, "REQ(out): %s: %q / %q o=%d s=%d h=%x", nodeID, repo, name, offset, size, hash)
 	}
 
 	return nc.Request(repo, name, offset, size)

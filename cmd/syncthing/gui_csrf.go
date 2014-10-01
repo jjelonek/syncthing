@@ -134,7 +134,7 @@ func randomString(len int) string {
 	bs := make([]byte, len)
 	_, err := rand.Reader.Read(bs)
 	if err != nil {
-		l.Fatalln(err)
+		l.Fatalln(logPrefix, err)
 	}
 
 	return base64.StdEncoding.EncodeToString(bs)

@@ -177,7 +177,7 @@ func ldbGenericReplace(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo
 		cmp := bytes.Compare(newName, oldName)
 
 		if debug {
-			l.Debugf("generic replace; repo=%q node=%v moreFs=%v moreDb=%v cmp=%d newName=%q oldName=%q", repo, protocol.NodeIDFromBytes(node), moreFs, moreDb, cmp, newName, oldName)
+			l.Debugf(logPrefix, "generic replace; repo=%q node=%v moreFs=%v moreDb=%v cmp=%d newName=%q oldName=%q", repo, protocol.NodeIDFromBytes(node), moreFs, moreDb, cmp, newName, oldName)
 		}
 
 		switch {
@@ -236,7 +236,7 @@ func ldbReplace(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo) uint6
 	return ldbGenericReplace(db, repo, node, fs, func(db dbReader, batch dbWriter, repo, node, name []byte, dbi iterator.Iterator) uint64 {
 		// Disk has files that we are missing. Remove it.
 		if debug {
-			l.Debugf("delete; repo=%q node=%v name=%q", repo, protocol.NodeIDFromBytes(node), name)
+			l.Debugf(logPrefix, "delete; repo=%q node=%v name=%q", repo, protocol.NodeIDFromBytes(node), name)
 		}
 		ldbRemoveFromGlobal(db, batch, repo, node, name)
 		batch.Delete(dbi.Key())
@@ -253,7 +253,7 @@ func ldbReplaceWithDelete(db *leveldb.DB, repo, node []byte, fs []protocol.FileI
 		}
 		if !tf.IsDeleted() {
 			if debug {
-				l.Debugf("mark deleted; repo=%q node=%v name=%q", repo, protocol.NodeIDFromBytes(node), name)
+				l.Debugf(logPrefix, "mark deleted; repo=%q node=%v name=%q", repo, protocol.NodeIDFromBytes(node), name)
 			}
 			ts := clock(tf.LocalVersion)
 			f := protocol.FileInfo{
@@ -327,7 +327,7 @@ func ldbUpdate(db *leveldb.DB, repo, node []byte, fs []protocol.FileInfo) uint64
 
 func ldbInsert(batch dbWriter, repo, node, name []byte, file protocol.FileInfo) uint64 {
 	if debug {
-		l.Debugf("insert; repo=%q node=%v %v", repo, protocol.NodeIDFromBytes(node), file)
+		l.Debugf(logPrefix, "insert; repo=%q node=%v %v", repo, protocol.NodeIDFromBytes(node), file)
 	}
 
 	if file.LocalVersion == 0 {
@@ -345,7 +345,7 @@ func ldbInsert(batch dbWriter, repo, node, name []byte, file protocol.FileInfo) 
 // If the file does not have an entry in the global list, it is created.
 func ldbUpdateGlobal(db dbReader, batch dbWriter, repo, node, file []byte, version uint64) bool {
 	if debug {
-		l.Debugf("update global; repo=%q node=%v file=%q version=%d", repo, protocol.NodeIDFromBytes(node), file, version)
+		l.Debugf(logPrefix, "update global; repo=%q node=%v file=%q version=%d", repo, protocol.NodeIDFromBytes(node), file, version)
 	}
 	gk := globalKey(repo, file)
 	svl, err := db.Get(gk, nil)
@@ -399,7 +399,7 @@ done:
 // removed entirely.
 func ldbRemoveFromGlobal(db dbReader, batch dbWriter, repo, node, file []byte) {
 	if debug {
-		l.Debugf("remove from global; repo=%q node=%v file=%q", repo, protocol.NodeIDFromBytes(node), file)
+		l.Debugf(logPrefix, "remove from global; repo=%q node=%v file=%q", repo, protocol.NodeIDFromBytes(node), file)
 	}
 
 	gk := globalKey(repo, file)
@@ -518,7 +518,7 @@ func ldbGetGlobal(db *leveldb.DB, repo, file []byte) protocol.FileInfo {
 		panic(err)
 	}
 	if len(vl.versions) == 0 {
-		l.Debugln(k)
+		l.Debugln(logPrefix, k)
 		panic("no versions?")
 	}
 
@@ -556,7 +556,7 @@ func ldbWithGlobal(db *leveldb.DB, repo []byte, truncate bool, fn fileIterator) 
 			panic(err)
 		}
 		if len(vl.versions) == 0 {
-			l.Debugln(dbi.Key())
+			l.Debugln(logPrefix, dbi.Key())
 			panic("no versions?")
 		}
 		fk := nodeKey(repo, vl.versions[0].node, globalKeyName(dbi.Key()))
@@ -625,7 +625,7 @@ outer:
 			panic(err)
 		}
 		if len(vl.versions) == 0 {
-			l.Debugln(dbi.Key())
+			l.Debugln(logPrefix, dbi.Key())
 			panic("no versions?")
 		}
 
@@ -672,7 +672,7 @@ outer:
 				}
 
 				if debug {
-					l.Debugf("need repo=%q node=%v name=%q need=%v have=%v haveV=%d globalV=%d", repo, protocol.NodeIDFromBytes(node), name, need, have, haveVersion, vl.versions[0].version)
+					l.Debugf(logPrefix, "need repo=%q node=%v name=%q need=%v have=%v haveV=%d globalV=%d", repo, protocol.NodeIDFromBytes(node), name, need, have, haveVersion, vl.versions[0].version)
 				}
 
 				if cont := fn(gf); !cont {

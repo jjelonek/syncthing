@@ -322,7 +322,7 @@ func (c *rawConnection) readMessage() (hdr header, msg encodable, err error) {
 	msglen := int(binary.BigEndian.Uint32(c.rdbuf0[4:8]))
 
 	if debug {
-		l.Debugf("read header %v (msglen=%d)", hdr, msglen)
+		l.Debugf(logPrefix, "read header %v (msglen=%d)", hdr, msglen)
 	}
 
 	if cap(c.rdbuf0) < msglen {
@@ -336,7 +336,7 @@ func (c *rawConnection) readMessage() (hdr header, msg encodable, err error) {
 	}
 
 	if debug {
-		l.Debugf("read %d bytes", len(c.rdbuf0))
+		l.Debugf(logPrefix, "read %d bytes", len(c.rdbuf0))
 	}
 
 	msgBuf := c.rdbuf0
@@ -348,7 +348,7 @@ func (c *rawConnection) readMessage() (hdr header, msg encodable, err error) {
 		}
 		msgBuf = c.rdbuf1
 		if debug {
-			l.Debugf("decompressed to %d bytes", len(msgBuf))
+			l.Debugf(logPrefix, "decompressed to %d bytes", len(msgBuf))
 		}
 	}
 
@@ -398,14 +398,14 @@ func (c *rawConnection) readMessage() (hdr header, msg encodable, err error) {
 
 func (c *rawConnection) handleIndex(im IndexMessage) {
 	if debug {
-		l.Debugf("Index(%v, %v, %d files)", c.id, im.Repository, len(im.Files))
+		l.Debugf(logPrefix, "Index(%v, %v, %d files)", c.id, im.Repository, len(im.Files))
 	}
 	c.receiver.Index(c.id, im.Repository, im.Files)
 }
 
 func (c *rawConnection) handleIndexUpdate(im IndexMessage) {
 	if debug {
-		l.Debugf("queueing IndexUpdate(%v, %v, %d files)", c.id, im.Repository, len(im.Files))
+		l.Debugf(logPrefix, "queueing IndexUpdate(%v, %v, %d files)", c.id, im.Repository, len(im.Files))
 	}
 	c.receiver.IndexUpdate(c.id, im.Repository, im.Files)
 }
@@ -489,7 +489,7 @@ func (c *rawConnection) writerLoop() {
 					msgBuf = msgBuf[0 : len(tempBuf)+8]
 
 					if debug {
-						l.Debugf("write compressed message; %v (len=%d)", hm.hdr, len(tempBuf))
+						l.Debugf(logPrefix, "write compressed message; %v (len=%d)", hm.hdr, len(tempBuf))
 					}
 				} else {
 					// No point in compressing very short messages
@@ -505,12 +505,12 @@ func (c *rawConnection) writerLoop() {
 					copy(msgBuf[8:], uncBuf)
 
 					if debug {
-						l.Debugf("write uncompressed message; %v (len=%d)", hm.hdr, len(uncBuf))
+						l.Debugf(logPrefix, "write uncompressed message; %v (len=%d)", hm.hdr, len(uncBuf))
 					}
 				}
 			} else {
 				if debug {
-					l.Debugf("write empty message; %v", hm.hdr)
+					l.Debugf(logPrefix, "write empty message; %v", hm.hdr)
 				}
 				binary.BigEndian.PutUint32(msgBuf[4:8], 0)
 				msgBuf = msgBuf[:8]
@@ -522,7 +522,7 @@ func (c *rawConnection) writerLoop() {
 				var n int
 				n, err = c.cw.Write(msgBuf)
 				if debug {
-					l.Debugf("wrote %d bytes on the wire", n)
+					l.Debugf(logPrefix, "wrote %d bytes on the wire", n)
 				}
 			}
 			if err != nil {
@@ -572,26 +572,26 @@ func (c *rawConnection) pingerLoop() {
 		case <-ticker:
 			if d := time.Since(c.cr.Last()); d < pingIdleTime {
 				if debug {
-					l.Debugln(c.id, "ping skipped after rd", d)
+					l.Debugln(logPrefix, c.id, "ping skipped after rd", d)
 				}
 				continue
 			}
 			if d := time.Since(c.cw.Last()); d < pingIdleTime {
 				if debug {
-					l.Debugln(c.id, "ping skipped after wr", d)
+					l.Debugln(logPrefix, c.id, "ping skipped after wr", d)
 				}
 				continue
 			}
 			go func() {
 				if debug {
-					l.Debugln(c.id, "ping ->")
+					l.Debugln(logPrefix, c.id, "ping ->")
 				}
 				rc <- c.ping()
 			}()
 			select {
 			case ok := <-rc:
 				if debug {
-					l.Debugln(c.id, "<- pong")
+					l.Debugln(logPrefix, c.id, "<- pong")
 				}
 				if !ok {
 					c.close(fmt.Errorf("ping failure"))

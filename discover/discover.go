@@ -66,9 +66,9 @@ func (d *Discoverer) StartLocal(localPort int, localMCAddr string) {
 		bb, err := beacon.NewBroadcast(localPort)
 		if err != nil {
 			if debug {
-				l.Debugln(err)
+				l.Debugln(logPrefix, err)
 			}
-			l.Infoln("Local discovery over IPv4 unavailable")
+			l.Infoln(logPrefix, "Local discovery over IPv4 unavailable")
 		} else {
 			d.broadcastBeacon = bb
 			go d.recvAnnouncements(bb)
@@ -79,9 +79,9 @@ func (d *Discoverer) StartLocal(localPort int, localMCAddr string) {
 		mb, err := beacon.NewMulticast(localMCAddr)
 		if err != nil {
 			if debug {
-				l.Debugln(err)
+				l.Debugln(logPrefix, err)
 			}
-			l.Infoln("Local discovery over IPv6 unavailable")
+			l.Infoln(logPrefix, "Local discovery over IPv6 unavailable")
 		} else {
 			d.multicastBeacon = mb
 			go d.recvAnnouncements(mb)
@@ -89,7 +89,7 @@ func (d *Discoverer) StartLocal(localPort int, localMCAddr string) {
 	}
 
 	if d.broadcastBeacon == nil && d.multicastBeacon == nil {
-		l.Warnln("Local discovery unavailable")
+		l.Warnln(logPrefix, "Local discovery unavailable")
 	} else {
 		d.localBcastTick = time.Tick(d.localBcastIntv)
 		d.forcedBcastTick = make(chan time.Time)
@@ -175,7 +175,7 @@ func (d *Discoverer) announcementPkt() []byte {
 	for _, astr := range d.listenAddrs {
 		addr, err := net.ResolveTCPAddr("tcp", astr)
 		if err != nil {
-			l.Warnln("%v: not announcing %s", err, astr)
+			l.Warnln(logPrefix, "%v: not announcing %s", err, astr)
 			continue
 		} else if debug {
 			l.Debugf("discover: announcing %s: %#v", astr, addr)
@@ -224,14 +224,14 @@ func (d *Discoverer) sendExternalAnnouncements() {
 
 	remote, err := net.ResolveUDPAddr("udp", d.extServer)
 	for err != nil {
-		l.Warnf("Global discovery: %v; trying again in %v", err, d.errorRetryIntv)
+		l.Warnf(logPrefix, "Global discovery: %v; trying again in %v", err, d.errorRetryIntv)
 		time.Sleep(d.errorRetryIntv)
 		remote, err = net.ResolveUDPAddr("udp", d.extServer)
 	}
 
 	conn, err := net.ListenUDP("udp", nil)
 	for err != nil {
-		l.Warnf("Global discovery: %v; trying again in %v", err, d.errorRetryIntv)
+		l.Warnf(logPrefix, "Global discovery: %v; trying again in %v", err, d.errorRetryIntv)
 		time.Sleep(d.errorRetryIntv)
 		conn, err = net.ListenUDP("udp", nil)
 	}
@@ -254,7 +254,7 @@ func (d *Discoverer) sendExternalAnnouncements() {
 		var ok bool
 
 		if debug {
-			l.Debugf("discover: send announcement -> %v\n%s", remote, hex.Dump(buf))
+			l.Debugf(logPrefix, "discover: send announcement -> %v\n%s", remote, hex.Dump(buf))
 		}
 
 		_, err := conn.WriteTo(buf, remote)
@@ -312,7 +312,7 @@ func (d *Discoverer) recvAnnouncements(b beacon.Interface) {
 		buf, addr := b.Recv()
 
 		if debug {
-			l.Debugf("discover: read announcement from %s:\n%s", addr, hex.Dump(buf))
+			l.Debugf(logPrefix, "discover: read announcement from %s:\n%s", addr, hex.Dump(buf))
 		}
 
 		var pkt Announce
@@ -367,7 +367,7 @@ func (d *Discoverer) registerNode(addr net.Addr, node Node) bool {
 	}
 
 	if debug {
-		l.Debugf("discover: register: %v -> %v", id, current)
+		l.Debugf(logPrefix, "discover: register: %v -> %v", id, current)
 	}
 
 	d.registryLock.Lock()
@@ -392,7 +392,7 @@ func (d *Discoverer) externalLookup(node protocol.NodeID) []string {
 	extIP, err := net.ResolveUDPAddr("udp", d.extServer)
 	if err != nil {
 		if debug {
-			l.Debugf("discover: %v; no external lookup", err)
+			l.Debugf(logPrefix, "discover: %v; no external lookup", err)
 		}
 		return nil
 	}
@@ -400,7 +400,7 @@ func (d *Discoverer) externalLookup(node protocol.NodeID) []string {
 	conn, err := net.DialUDP("udp", nil, extIP)
 	if err != nil {
 		if debug {
-			l.Debugf("discover: %v; no external lookup", err)
+			l.Debugf(logPrefix, "discover: %v; no external lookup", err)
 		}
 		return nil
 	}
@@ -409,7 +409,7 @@ func (d *Discoverer) externalLookup(node protocol.NodeID) []string {
 	err = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if err != nil {
 		if debug {
-			l.Debugf("discover: %v; no external lookup", err)
+			l.Debugf(logPrefix, "discover: %v; no external lookup", err)
 		}
 		return nil
 	}
@@ -418,7 +418,7 @@ func (d *Discoverer) externalLookup(node protocol.NodeID) []string {
 	_, err = conn.Write(buf)
 	if err != nil {
 		if debug {
-			l.Debugf("discover: %v; no external lookup", err)
+			l.Debugf(logPrefix, "discover: %v; no external lookup", err)
 		}
 		return nil
 	}
@@ -431,7 +431,7 @@ func (d *Discoverer) externalLookup(node protocol.NodeID) []string {
 			return nil
 		}
 		if debug {
-			l.Debugf("discover: %v; no external lookup", err)
+			l.Debugf(logPrefix, "discover: %v; no external lookup", err)
 		}
 		return nil
 	}

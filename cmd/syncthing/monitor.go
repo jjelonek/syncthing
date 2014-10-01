@@ -41,7 +41,7 @@ func monitorMain() {
 
 	for {
 		if t := time.Since(restarts[0]); t < loopThreshold {
-			l.Warnf("%d restarts in %v; not retrying further", countRestarts, t)
+			l.Warnf(logPrefix, "%d restarts in %v; not retrying further", countRestarts, t)
 			os.Exit(exitError)
 		}
 
@@ -52,18 +52,18 @@ func monitorMain() {
 
 		stderr, err := cmd.StderrPipe()
 		if err != nil {
-			l.Fatalln(err)
+			l.Fatalln(logPrefix, err)
 		}
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
-			l.Fatalln(err)
+			l.Fatalln(logPrefix, err)
 		}
 
-		l.Infoln("Starting syncthing")
+		l.Infoln(logPrefix, "Starting syncthing")
 		err = cmd.Start()
 		if err != nil {
-			l.Fatalln(err)
+			l.Fatalln(logPrefix, err)
 		}
 
 		stdoutMut.Lock()
@@ -82,7 +82,7 @@ func monitorMain() {
 
 		select {
 		case s := <-sign:
-			l.Infof("Signal %d received; exiting", s)
+			l.Infof(logPrefix, "Signal %d received; exiting", s)
 			cmd.Process.Kill()
 			<-exit
 			return
@@ -97,11 +97,11 @@ func monitorMain() {
 					case exitUpgrading:
 						// Restart the monitor process to release the .old
 						// binary as part of the upgrade process.
-						l.Infoln("Restarting monitor...")
+						l.Infoln(logPrefix, "Restarting monitor...")
 						os.Setenv("STNORESTART", "")
 						err := exec.Command(args[0], args[1:]...).Start()
 						if err != nil {
-							l.Warnln("restart:", err)
+							l.Warnln(logPrefix, "restart:", err)
 						}
 						return
 					}
@@ -109,7 +109,7 @@ func monitorMain() {
 			}
 		}
 
-		l.Infoln("Syncthing exited:", err)
+		l.Infoln(logPrefix, "Syncthing exited:", err)
 		time.Sleep(1 * time.Second)
 
 		// Let the next child process know that this is not the first time
@@ -134,12 +134,12 @@ func copyStderr(stderr io.ReadCloser) {
 			if strings.HasPrefix(line, "panic:") || strings.HasPrefix(line, "fatal error:") {
 				panicFd, err = os.Create(filepath.Join(confDir, time.Now().Format("panic-20060102-150405.log")))
 				if err != nil {
-					l.Warnln("Create panic log:", err)
+					l.Warnln(logPrefix, "Create panic log:", err)
 					continue
 				}
 
-				l.Warnf("Panic detected, writing to \"%s\"", panicFd.Name())
-				l.Warnln("Please create an issue at https://github.com/syncthing/syncthing/issues/ with the panic log attached")
+				l.Warnf(logPrefix, "Panic detected, writing to \"%s\"", panicFd.Name())
+				l.Warnln(logPrefix, "Please create an issue at https://github.com/syncthing/syncthing/issues/ with the panic log attached")
 
 				panicFd.WriteString("Panic at " + time.Now().Format(time.RFC1123) + "\n")
 				stdoutMut.Lock()

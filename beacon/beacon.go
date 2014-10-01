@@ -21,11 +21,11 @@ func genericReader(conn *net.UDPConn, outbox chan<- recv) {
 	for {
 		n, addr, err := conn.ReadFrom(bs)
 		if err != nil {
-			l.Warnln("multicast read:", err)
+			l.Warnln("", "multicast read:", err)
 			return
 		}
 		if debug {
-			l.Debugf("recv %d bytes from %s", n, addr)
+			l.Debugf("", "recv %d bytes from %s", n, addr)
 		}
 
 		c := make([]byte, n)

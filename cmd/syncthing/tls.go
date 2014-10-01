@@ -42,10 +42,10 @@ func certSeed(bs []byte) int64 {
 }
 
 func newCertificate(dir string, prefix string) {
-	l.Infoln("Generating RSA key and certificate...")
+	l.Infoln(logPrefix, "Generating RSA key and certificate...")
 
 	priv, err := rsa.GenerateKey(rand.Reader, tlsRSABits)
-	l.FatalErr(err)
+	l.FatalErr(logPrefix, err)
 
 	notBefore := time.Now()
 	notAfter := time.Date(2049, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -64,15 +64,15 @@ func newCertificate(dir string, prefix string) {
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	l.FatalErr(err)
+	l.FatalErr(logPrefix, err)
 
 	certOut, err := os.Create(filepath.Join(dir, prefix+"cert.pem"))
-	l.FatalErr(err)
+	l.FatalErr(logPrefix, err)
 	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 	certOut.Close()
 
 	keyOut, err := os.OpenFile(filepath.Join(dir, prefix+"key.pem"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	l.FatalErr(err)
+	l.FatalErr(logPrefix, err)
 	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 	keyOut.Close()
 }

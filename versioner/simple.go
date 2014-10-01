@@ -37,7 +37,7 @@ func NewSimple(repoID, repoPath string, params map[string]string) Versioner {
 	}
 
 	if debug {
-		l.Debugf("instantiated %#v", s)
+		l.Debugf(logPrefix, "instantiated %#v", s)
 	}
 	return s
 }

@@ -23,14 +23,14 @@ func TestAPI(t *testing.T) {
 	ok := 0
 	l.AddHandler(LevelOK, checkFunc(t, LevelOK, "test 3", &ok))
 
-	l.Debugf("test %d", 0)
-	l.Debugln("test", 0)
-	l.Infof("test %d", 1)
-	l.Infoln("test", 1)
-	l.Warnf("test %d", 2)
-	l.Warnln("test", 2)
-	l.Okf("test %d", 3)
-	l.Okln("test", 3)
+	l.Debugf(logPrefix, "test %d", 0)
+	l.Debugln(logPrefix, "test", 0)
+	l.Infof(logPrefix, "test %d", 1)
+	l.Infoln(logPrefix, "test", 1)
+	l.Warnf(logPrefix, "test %d", 2)
+	l.Warnln(logPrefix, "test", 2)
+	l.Okf(logPrefix, "test %d", 3)
+	l.Okln(logPrefix, "test", 3)
 
 	if debug != 2 {
 		t.Errorf("Debug handler called %d != 2 times", debug)

@@ -56,8 +56,8 @@ func startGUI(cfg config.GUIConfiguration, assetDir string, m *model.Model) erro
 
 	cert, err := loadCert(confDir, "https-")
 	if err != nil {
-		l.Infoln("Loading HTTPS certificate:", err)
-		l.Infoln("Creating new HTTPS certificate")
+		l.Infoln(logPrefix, "Loading HTTPS certificate:", err)
+		l.Infoln(logPrefix, "Creating new HTTPS certificate")
 		newCertificate(confDir, "https-")
 		cert, err = loadCert(confDir, "https-")
 	}
@@ -295,7 +295,7 @@ func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
 	var newCfg config.Configuration
 	err := json.NewDecoder(r.Body).Decode(&newCfg)
 	if err != nil {
-		l.Warnln("decoding posted config:", err)
+		l.Warnln(logPrefix, "decoding posted config:", err)
 		http.Error(w, err.Error(), 500)
 		return
 	} else {
@@ -303,7 +303,7 @@ func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
 			if newCfg.GUI.Password != "" {
 				hash, err := bcrypt.GenerateFromPassword([]byte(newCfg.GUI.Password), 0)
 				if err != nil {
-					l.Warnln("bcrypting password:", err)
+					l.Warnln(logPrefix, "bcrypting password:", err)
 					http.Error(w, err.Error(), 500)
 					return
 				} else {
@@ -346,7 +346,7 @@ func restPostConfig(m *model.Model, w http.ResponseWriter, r *http.Request) {
 			newCfg.Options.URAccepted = usageReportVersion
 			err := sendUsageReport(m)
 			if err != nil {
-				l.Infoln("Usage report:", err)
+				l.Infoln(logPrefix, "Usage report:", err)
 			}
 			go usageReportingLoop(m)
 		} else if newCfg.Options.URAccepted < cfg.Options.URAccepted {
@@ -535,7 +535,7 @@ func restGetLang(w http.ResponseWriter, r *http.Request) {
 func restPostUpgrade(w http.ResponseWriter, r *http.Request) {
 	rel, err := upgrade.LatestRelease(strings.Contains(Version, "-beta"))
 	if err != nil {
-		l.Warnln("getting latest release:", err)
+		l.Warnln(logPrefix, "getting latest release:", err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -543,13 +543,13 @@ func restPostUpgrade(w http.ResponseWriter, r *http.Request) {
 	if upgrade.CompareVersions(rel.Tag, Version) == 1 {
 		err = upgrade.UpgradeTo(rel, GoArchExtra)
 		if err != nil {
-			l.Warnln("upgrading:", err)
+			l.Warnln(logPrefix, "upgrading:", err)
 			http.Error(w, err.Error(), 500)
 			return
 		}
 
 		flushResponse(`{"ok": "restarting"}`, w)
-		l.Infoln("Upgrading")
+		l.Infoln(logPrefix, "Upgrading")
 		stop <- exitUpgrading
 	}
 }
