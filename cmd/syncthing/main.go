@@ -619,6 +619,7 @@ nextRepo:
 	discoverer = discovery(externalPort)
 	go listenConnect(myID, m, tlsCfg)
 
+	time.Sleep(10 * time.Second)
 	for _, repo := range cfg.Repositories {
 		if repo.Invalid != "" {
 			continue
