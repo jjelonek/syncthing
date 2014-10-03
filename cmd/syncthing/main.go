@@ -354,7 +354,7 @@ func syncthingMain() {
 
 	// Ensure that our home directory exists and that we have a certificate and key.
 
-	ensureDir(confDir, 0700)
+	ensureDir(confDir, 0770)
 	cert, err = loadCert(confDir, "")
 	if err != nil {
 		newCertificate(confDir, "")
