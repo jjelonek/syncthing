@@ -426,7 +426,7 @@ func syncthingMain() {
 
 		cfg.Save()
 
-		l.Infof("Edit %s to taste or use the GUI\n", cfgFile)
+		l.Infof(logPrefix, "Edit %s to taste or use the GUI\n", cfgFile)
 	}
 
 	if profiler := os.Getenv("STPROFILER"); len(profiler) > 0 {
@@ -475,7 +475,7 @@ func syncthingMain() {
 	repoMap := cfg.RepoMap()
 	for _, repo := range files.ListRepos(db) {
 		if _, ok := repoMap[repo]; !ok {
-			l.Infof("Cleaning data for dropped repo %q", repo)
+			l.Infof(logPrefix, "Cleaning data for dropped repo %q", repo)
 			files.DropRepo(db, repo)
 		}
 	}
@@ -771,7 +771,7 @@ func resetRepositories() {
 	suffix := fmt.Sprintf(".syncthing-reset-%d", time.Now().UnixNano())
 	for _, repo := range cfg.Repositories {
 		if _, err := os.Stat(repo.Directory); err == nil {
-			l.Infof("Reset: Moving %s -> %s", repo.Directory, repo.Directory+suffix)
+			l.Infof(logPrefix, "Reset: Moving %s -> %s", repo.Directory, repo.Directory+suffix)
 			os.Rename(repo.Directory, repo.Directory+suffix)
 		}
 	}
@@ -793,7 +793,7 @@ func archiveLegacyConfig() {
 		}
 
 		for _, idx := range idxs {
-			l.Infof("Archiving %s", filepath.Base(idx))
+			l.Infof(logPrefix, "Archiving %s", filepath.Base(idx))
 			os.Rename(idx, filepath.Join(backupDir, filepath.Base(idx)))
 		}
 
