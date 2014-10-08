@@ -61,7 +61,7 @@ type fileStorage struct {
 //
 // The storage must be closed after use, by calling Close method.
 func OpenFile(path string) (Storage, error) {
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0775); err != nil {
 		return nil, err
 	}
 
