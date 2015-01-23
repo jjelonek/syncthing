@@ -200,29 +200,24 @@ func main() {
 
 	// begin of the recoded code
 	var (
-		shipId   int
-		shipMode bool
-		srcDir   string
+		vesselMode bool
+		srcDir     string
 	)
-	flag.IntVar(&shipId, "ship", -1, "ship id - a number [0..999]")
+	flag.BoolVar(&vesselMode, "vessel", false, "vessel flag")
 	flag.Parse()
-	if shipId == -1 {
-		shipMode = false
-	} else {
-		shipMode = true
-		if shipId < 0 {
-			fmt.Println("-ship parameter must be assigned to a positive integer")
-			return
-		}
-	}
 	cfg := common.ReadConfigFile()
 	noBrowser = !cfg.StartGui
-	if shipMode {
-		srcDir = cfg.Ship.Dir
-		shipDir := fmt.Sprintf("%s%03d", common.ClientNodePrefix, shipId)
-		logDir := cfg.Ship.Dir + string(os.PathSeparator) + shipDir + string(os.PathSeparator)
+	if vesselMode {
+		srcDir = cfg.Vessel.Dir
+		aisId := cfg.Vessel.Ais
+		vesselDir := fmt.Sprintf("%s%09d", common.ClientNodePrefix, aisId)
+		logDir := cfg.Vessel.Dir + string(os.PathSeparator) + vesselDir + string(os.PathSeparator)
 		logger.RecodedLogger = logger.CreateFileConsoleLogger(logDir)
-		go aisserver.Start(cfg, shipId, logger.RecodedLogger)
+		go aisserver.Start(cfg, logger.RecodedLogger)
+		var event chan byte
+		if !cfg.Vessel.RemoteAIS.Active {
+			<-event
+		}
 	} else {
 		srcDir = cfg.Server.Dir
 		logger.RecodedLogger = logger.CreateFileConsoleLogger(srcDir)
