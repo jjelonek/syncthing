@@ -209,8 +209,8 @@ func main() {
 	noBrowser = !cfg.StartGui
 	if vesselMode {
 		srcDir = cfg.Vessel.Dir
-		aisId := cfg.Vessel.Ais
-		vesselDir := fmt.Sprintf("%s%09d", common.ClientNodePrefix, aisId)
+		mmsi := cfg.Vessel.Mmsi
+		vesselDir := fmt.Sprintf("%s%09d", common.ClientNodePrefix, mmsi)
 		logDir := cfg.Vessel.Dir + string(os.PathSeparator) + vesselDir + string(os.PathSeparator)
 		logger.RecodedLogger = logger.CreateFileConsoleLogger(logDir)
 		go aisserver.Start(cfg, logger.RecodedLogger)
