@@ -1,0 +1,63 @@
+<vtrackerConfig>
+    <vessel>
+        <mmsi>999999999</mmsi>
+        <dir>vtracker</dir>
+        <logInterval>4</logInterval>
+        <serialPortGPS>/dev/tty.usbserial</serialPortGPS>
+        <remoteAIS active="false">
+            <onshoreServer>h.recoded.co</onshoreServer>
+            <onshorePort>22322</onshorePort>
+            <pingInterval>60</pingInterval>
+        </remoteAIS>
+        <localAIS active="true">
+            <gunicornPort>50003</gunicornPort>
+            <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
+        </localAIS>
+        <sourceAIS socket="true">
+            <udp>
+                <port>50001</port>
+            </udp>
+            <serial>
+                <port>/dev/tty.usbserial</port>
+                <baudRate>115200</baudRate>
+            </serial>
+        </sourceAIS>
+        <dataFilter active="true">
+            <kNearestVessel active="true">3</kNearestVessel>
+            <range active="true">10</range>
+            <time active="true">
+                <start>0:01</start>
+                <stop>23:59</stop>
+            </time>
+        </dataFilter>
+    </vessel>
+    <server>
+        <dir>vtracker</dir>
+        <gunicornServer>h.dariuszwalczak.com</gunicornServer>
+        <gunicornPort>3</gunicornPort>
+        <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
+        <pingInterval>60</pingInterval>
+        <pingPort>50000</pingPort>
+        <localPort>50002</localPort>
+    </server>
+    <service>
+        <mailserver>
+            <identity></identity>
+            <username>recoded.service</username>
+            <password>wbwReH84CTfX3yzaDYyF</password>
+            <host>smtp.gmail.com</host>
+            <port>587</port>
+        </mailserver>
+        <thresholds>
+            <ping_out>30</ping_out>
+            <ping_in>30</ping_in>
+            <sync>30</sync>
+            <ais>30</ais>
+        </thresholds>
+        <observers>
+            <mail>jacek.jelonek@gmail.com</mail>
+        </observers>
+    </service>
+    <globalDiscoveryServer>88.198.224.211:22026</globalDiscoveryServer>
+    <startGui>false</startGui>
+</vtrackerConfig>
