@@ -545,6 +545,10 @@ nextRepo:
 			if err != nil {
 				l.Fatalln(logPrefix, "Cannot start GUI:", err)
 			}
+			// recoded
+			common.GuiServerStarted <- true
+			l.Infof(logPrefix, "Web GUI started\n")
+			//
 			if !noBrowser && cfg.Options.StartBrowser && len(os.Getenv("STRESTART")) == 0 {
 				openURL(fmt.Sprintf("%s://%s:%d", proto, hostOpen, addr.Port))
 			}
