@@ -1,12 +1,10 @@
 <vtrackerConfig>
     <vessel>
         <mmsi>999999999</mmsi>
-        <dir>vtracker</dir>
+        <dir>vtracker-vessel</dir>
         <logInterval>4</logInterval>
-        <serialPortGPS>/dev/tty.usbserial</serialPortGPS>
-        <remoteAIS active="false">
-            <onshoreServer>h.recoded.co</onshoreServer>
-            <onshorePort>22322</onshorePort>
+        <gpsTimeOnly>true</gpsTimeOnly>
+        <remoteAIS active="true">
             <pingInterval>60</pingInterval>
         </remoteAIS>
         <localAIS active="true">
@@ -17,10 +15,9 @@
             <udp>
                 <port>50001</port>
             </udp>
-            <serial>
-                <port>/dev/tty.usbserial</port>
-                <baudRate>115200</baudRate>
-            </serial>
+            <gpsd>
+                <port>2947</port>
+            </gpsd>
         </sourceAIS>
         <dataFilter active="true">
             <kNearestVessel active="true">3</kNearestVessel>
@@ -32,13 +29,15 @@
         </dataFilter>
     </vessel>
     <server>
-        <dir>vtracker</dir>
-        <gunicornServer>h.dariuszwalczak.com</gunicornServer>
-        <gunicornPort>3</gunicornPort>
-        <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
-        <pingInterval>60</pingInterval>
+        <dir>vtracker-server</dir>
+        <aisServer>localhost</aisServer>
+        <aisPort>50002</aisPort>
+        <discPort>22026</discPort>
         <pingPort>50000</pingPort>
-        <localPort>50002</localPort>
+        <pingInterval>60</pingInterval>
+        <gunicornServer>h.dariuszwalczak.com</gunicornServer>
+        <gunicornPort>50003</gunicornPort>
+        <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
     </server>
     <service>
         <mailserver>
@@ -58,6 +57,7 @@
             <mail>jacek.jelonek@gmail.com</mail>
         </observers>
     </service>
-    <globalDiscoveryServer>88.198.224.211:22026</globalDiscoveryServer>
+    <!-- <globalDiscoveryServer>88.198.224.211:22026</globalDiscoveryServer>
+    <globalDiscoveryServer>localhost:22026</globalDiscoveryServer> -->
     <startGui>false</startGui>
 </vtrackerConfig>

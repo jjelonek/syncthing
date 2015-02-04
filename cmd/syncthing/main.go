@@ -35,6 +35,7 @@ import (
 
 	"code.google.com/p/go.crypto/bcrypt"
 	"github.com/juju/ratelimit"
+	"github.com/syncthing/discosrv"
 	"github.com/syncthing/syncthing/config"
 	"github.com/syncthing/syncthing/discover"
 	"github.com/syncthing/syncthing/events"
@@ -221,6 +222,9 @@ func main() {
 	} else {
 		srcDir = cfg.Server.Dir
 		logger.RecodedLogger = logger.CreateFileConsoleLogger(srcDir)
+		discosrvDir := srcDir + "/discosrv/"
+		go discosrv.Start(discosrvDir, logger.RecodedLogger)
+		time.Sleep(time.Second)
 		go httpserver.Start(cfg, logger.RecodedLogger)
 	}
 	recodedLog := logger.RecodedLogger.Get()
@@ -546,8 +550,8 @@ nextRepo:
 				l.Fatalln(logPrefix, "Cannot start GUI:", err)
 			}
 			// recoded
-			common.GuiServerStarted <- true
 			l.Infof(logPrefix, "Web GUI started\n")
+			common.GuiServerStarted <- true
 			//
 			if !noBrowser && cfg.Options.StartBrowser && len(os.Getenv("STRESTART")) == 0 {
 				openURL(fmt.Sprintf("%s://%s:%d", proto, hostOpen, addr.Port))
