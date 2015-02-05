@@ -750,7 +750,7 @@ func renewUPnP(port int) {
 		if externalPort != 0 {
 			err = igd.AddPortMapping(upnp.TCP, externalPort, port, "syncthing", cfg.Options.UPnPLease*60)
 			if err == nil {
-				l.Infoln(logPrefix, "Renewed UPnP port mapping - external port", externalPort)
+				// l.Infoln(logPrefix, "Renewed UPnP port mapping - external port", externalPort)
 				continue
 			}
 		}

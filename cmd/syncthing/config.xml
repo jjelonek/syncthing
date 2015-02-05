@@ -11,7 +11,7 @@
             <gunicornPort>50003</gunicornPort>
             <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
         </localAIS>
-        <sourceAIS socket="true">
+        <sourceAIS socket="false">
             <udp>
                 <port>50001</port>
             </udp>
