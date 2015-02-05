@@ -1,17 +1,17 @@
 <vtrackerConfig>
     <vessel>
-        <mmsi>999999999</mmsi>
+        <mmsi>999999998</mmsi>
         <dir>vtracker-vessel</dir>
         <logInterval>4</logInterval>
-        <gpsTimeOnly>true</gpsTimeOnly>
+        <gpsTimeOnly>false</gpsTimeOnly>
         <remoteAIS active="true">
             <pingInterval>60</pingInterval>
         </remoteAIS>
-        <localAIS active="true">
+        <localAIS active="false">
             <gunicornPort>50003</gunicornPort>
             <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
         </localAIS>
-        <sourceAIS socket="false">
+        <sourceAIS socket="true">
             <udp>
                 <port>50001</port>
             </udp>
@@ -19,7 +19,7 @@
                 <port>2947</port>
             </gpsd>
         </sourceAIS>
-        <dataFilter active="true">
+        <dataFilter active="false">
             <kNearestVessel active="true">3</kNearestVessel>
             <range active="true">10</range>
             <time active="true">
@@ -30,12 +30,12 @@
     </vessel>
     <server>
         <dir>vtracker-server</dir>
-        <aisServer>localhost</aisServer>
+        <aisServer>vtracker.recoded.co</aisServer>
         <aisPort>50002</aisPort>
         <discPort>22026</discPort>
         <pingPort>50000</pingPort>
         <pingInterval>60</pingInterval>
-        <gunicornServer>h.dariuszwalczak.com</gunicornServer>
+        <gunicornServer>localhost</gunicornServer>
         <gunicornPort>50003</gunicornPort>
         <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
     </server>
@@ -57,7 +57,5 @@
             <mail>jacek.jelonek@gmail.com</mail>
         </observers>
     </service>
-    <!-- <globalDiscoveryServer>88.198.224.211:22026</globalDiscoveryServer>
-    <globalDiscoveryServer>localhost:22026</globalDiscoveryServer> -->
     <startGui>false</startGui>
 </vtrackerConfig>
