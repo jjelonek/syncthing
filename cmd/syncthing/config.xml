@@ -1,6 +1,6 @@
 <vtrackerConfig>
     <vessel>
-        <mmsi>999999998</mmsi>
+        <mmsi>999999997</mmsi>
         <dir>vtracker-vessel</dir>
         <logInterval>4</logInterval>
         <gpsTimeOnly>false</gpsTimeOnly>
@@ -9,7 +9,7 @@
         </remoteAIS>
         <localAIS active="false">
             <gunicornPort>50003</gunicornPort>
-            <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
+            <token>db67813d9adfebeebc0232c2fb67ae638e310fd9</token>
         </localAIS>
         <sourceAIS socket="true">
             <udp>
@@ -37,7 +37,7 @@
         <pingInterval>60</pingInterval>
         <gunicornServer>localhost</gunicornServer>
         <gunicornPort>50003</gunicornPort>
-        <token>cc4c6c2b6f9bc5c15e1e4e19744f60f022ee6cbd</token>
+        <token>db67813d9adfebeebc0232c2fb67ae638e310fd9</token>
     </server>
     <service>
         <mailserver>
