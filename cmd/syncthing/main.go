@@ -209,13 +209,18 @@ func main() {
 	cfg := common.ReadConfigFile()
 	noBrowser = !cfg.StartGui
 	if vesselMode {
+		var event chan byte
 		srcDir = cfg.Vessel.Dir
 		mmsi := cfg.Vessel.Mmsi
+		if mmsi == 0 {
+			logger.RecodedLogger = logger.CreateConsoleLogger()
+			go aisserver.StartWeb(cfg.Vessel.LocalAIS.WebPort, logger.RecodedLogger)
+			<-event
+		}
 		vesselDir := fmt.Sprintf("%s%09d", common.ClientNodePrefix, mmsi)
 		logDir := cfg.Vessel.Dir + string(os.PathSeparator) + vesselDir + string(os.PathSeparator)
 		logger.RecodedLogger = logger.CreateFileConsoleLogger(logDir)
-		go aisserver.Start(cfg, logger.RecodedLogger)
-		var event chan byte
+		go aisserver.StartAll(cfg, logger.RecodedLogger)
 		if !cfg.Vessel.RemoteAIS.Active {
 			<-event
 		}

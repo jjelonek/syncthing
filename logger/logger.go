@@ -76,6 +76,12 @@ func CreateFileConsoleLogger(dir string) *Logger {
 	}
 }
 
+func CreateConsoleLogger() *Logger {
+	return &Logger{
+		logger: log.New(os.Stdout, "[start] ", log.Ldate|log.Ltime),
+	}
+}
+
 func (l *Logger) SetPrefix(prefix string) {
 	l.logger.SetPrefix(prefix)
 }
