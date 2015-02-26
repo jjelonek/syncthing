@@ -10,6 +10,7 @@ import (
 	// begin of the recoded code
 	"aisserver"
 	"common"
+	"filemanager"
 	"httpserver"
 	// end of the recoded code
 
@@ -185,6 +186,13 @@ var (
 	guiAPIKey         string
 )
 
+func removeOldDir(path, mmsi string) {
+	dirList := filemanager.GetDirList(path, common.ClientNodePrefix+mmsi, false, false)
+	if len(dirList) == 0 {
+		os.RemoveAll(path)
+	}
+}
+
 func main() {
 	flag.StringVar(&confDir, "home", getDefaultConfDir(), "Set configuration directory")
 	flag.BoolVar(&reset, "reset", false, "Prepare to resync from cluster")
@@ -212,14 +220,17 @@ func main() {
 		var event chan byte
 		srcDir = cfg.Vessel.Dir
 		mmsi := cfg.Vessel.Mmsi
-		if mmsi == 0 {
+		if mmsi == "" {
 			logger.RecodedLogger = logger.CreateConsoleLogger()
-			go aisserver.StartWeb(cfg.Vessel.LocalAIS.WebPort, logger.RecodedLogger)
+			common.SetLogger(logger.RecodedLogger)
+			go aisserver.StartWeb(cfg.Vessel.LocalAIS.WebPort, "[start]", logger.RecodedLogger)
 			<-event
 		}
-		vesselDir := fmt.Sprintf("%s%09d", common.ClientNodePrefix, mmsi)
+		removeOldDir(srcDir, mmsi)
+		vesselDir := fmt.Sprintf("%s%s", common.ClientNodePrefix, mmsi)
 		logDir := cfg.Vessel.Dir + string(os.PathSeparator) + vesselDir + string(os.PathSeparator)
 		logger.RecodedLogger = logger.CreateFileConsoleLogger(logDir)
+		common.SetLogger(logger.RecodedLogger)
 		go aisserver.StartAll(cfg, logger.RecodedLogger)
 		if !cfg.Vessel.RemoteAIS.Active {
 			<-event

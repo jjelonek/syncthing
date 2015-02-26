@@ -1,17 +1,18 @@
 <vtrackerConfig>
     <vessel>
-        <mmsi>222222222</mmsi>
+        <mmsi>2</mmsi>
         <dir>vtracker-vessel</dir>
         <logInterval>4</logInterval>
         <gpsTimeOnly>true</gpsTimeOnly>
-        <remoteAIS active="false">
+        <configPort>50004</configPort>
+        <remoteAIS active="true">
             <pingInterval>60</pingInterval>
         </remoteAIS>
-        <localAIS active="true">
-            <gunicornPort>50003</gunicornPort>
+        <localAIS active="false">
+            <webPort>50003</webPort>
             <token>db67813d9adfebeebc0232c2fb67ae638e310fd9</token>
         </localAIS>
-        <sourceAIS socket="false">
+        <sourceAIS socket="true">
             <udp>
                 <port>50001</port>
             </udp>
@@ -20,11 +21,12 @@
             </gpsd>
         </sourceAIS>
         <dataFilter active="false">
-            <kNearestVessel active="true">3</kNearestVessel>
-            <range active="true">10</range>
-            <time active="true">
-                <start>0:01</start>
-                <stop>23:59</stop>
+            <downsampling active="false">300</downsampling>
+            <kNearestVessel active="false">5</kNearestVessel>
+            <range active="false">1.5</range>
+            <time active="false">
+                <start>20:17</start>
+                <stop>23:58</stop>
             </time>
         </dataFilter>
     </vessel>
@@ -41,7 +43,7 @@
     </server>
     <service>
         <mailserver>
-            <identity></identity>
+            <identity/>
             <username>recoded.service</username>
             <password>wbwReH84CTfX3yzaDYyF</password>
             <host>smtp.gmail.com</host>
