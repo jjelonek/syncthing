@@ -12,6 +12,9 @@ import (
 	"common"
 	"filemanager"
 	"httpserver"
+	"io/ioutil"
+
+	"github.com/jjelonek/license"
 	// end of the recoded code
 
 	"crypto/sha1"
@@ -187,9 +190,51 @@ var (
 )
 
 func removeOldDir(path, mmsi string) {
-	dirList := filemanager.GetDirList(path, common.ClientNodePrefix+mmsi, false, false)
+	vesselId, _ := strconv.Atoi(mmsi)
+	mask := fmt.Sprintf("%s%09d", common.ClientNodePrefix, vesselId)
+	dirList := filemanager.GetDirList(path, mask, false, false)
 	if len(dirList) == 0 {
 		os.RemoveAll(path)
+	}
+}
+
+func verifyLicenseOnServer(licenseFile, licenseServer string) {
+	inter, _ := net.InterfaceByName("en0")
+	macAddress := inter.HardwareAddr.String()
+	httpURL := fmt.Sprintf("http://%s/license?key=%s", licenseServer, macAddress)
+	// fmt.Printf("License server: %q\n", httpURL)
+	for {
+		resp, err := http.Get(httpURL)
+		if err == nil {
+			if resp.StatusCode == 200 {
+				body, _ := ioutil.ReadAll(resp.Body)
+				// if ok, _, _, err := license.CheckLicenseExpirationFromMemory(body, []byte(aisserver.PK)); ok {
+				if ok, _, _, _ := license.CheckLicenseExpirationFromMemory(body, []byte(aisserver.PK)); ok {
+					mode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+					file, _ := os.OpenFile(licenseFile, mode, 0600)
+					file.WriteString(string(body))
+					file.Close()
+					// fmt.Printf("License has been acquired from the server and is valid\n")
+					common.RestartSync()
+				}
+				/*
+					else {
+						if err != nil {
+							fmt.Printf("License has been acquired from the server but is corrupted.\n")
+						} else {
+							fmt.Printf("License has been acquired from the server but expired.")
+						}
+					}
+				*/
+				resp.Body.Close()
+			} else {
+				// fmt.Printf("License for key=%q is not available.", macAddress)
+			}
+		} else {
+			// fmt.Printf("License server not available.")
+		}
+		// fmt.Printf(" The next trial in 15 sec.\n")
+		time.Sleep(15 * time.Second)
 	}
 }
 
@@ -217,17 +262,35 @@ func main() {
 	cfg := common.ReadConfigFile()
 	noBrowser = !cfg.StartGui
 	if vesselMode {
+		// aisserver.GenKey()
+		aisserver.LicenseFile = cfg.Vessel.License.File
 		var event chan byte
 		srcDir = cfg.Vessel.Dir
 		mmsi := cfg.Vessel.Mmsi
-		if mmsi == "" {
+		licenseOK, _, expirationTime, err := license.CheckLicenseExpirationFromFile(aisserver.LicenseFile, aisserver.PK)
+		if mmsi == "" || !licenseOK {
 			logger.RecodedLogger = logger.CreateConsoleLogger()
 			common.SetLogger(logger.RecodedLogger)
-			go aisserver.StartWeb(cfg.Vessel.LocalAIS.WebPort, "[start]", logger.RecodedLogger)
+			inter, _ := net.InterfaceByName("en0")
+			macAddress := inter.HardwareAddr.String()
+			logger.RecodedLogger.Infof("[start]", "MAC address: %s\n", macAddress)
+			go aisserver.StartWeb(cfg.Vessel.ConfigPort, "[start]", logger.RecodedLogger)
+			if err != nil {
+				logger.RecodedLogger.Warnf("[start]", "License file %q: %s", aisserver.LicenseFile, err.Error())
+			} else {
+				if !licenseOK {
+					logger.RecodedLogger.Warnf("[start]", "License expirted at %s", expirationTime)
+				}
+			}
+			if !licenseOK {
+				licenseServer := cfg.Vessel.License.Server
+				verifyLicenseOnServer(aisserver.LicenseFile, licenseServer)
+			}
 			<-event
 		}
 		removeOldDir(srcDir, mmsi)
-		vesselDir := fmt.Sprintf("%s%s", common.ClientNodePrefix, mmsi)
+		vesselId, _ := strconv.Atoi(mmsi)
+		vesselDir := fmt.Sprintf("%s%09d", common.ClientNodePrefix, vesselId)
 		logDir := cfg.Vessel.Dir + string(os.PathSeparator) + vesselDir + string(os.PathSeparator)
 		logger.RecodedLogger = logger.CreateFileConsoleLogger(logDir)
 		common.SetLogger(logger.RecodedLogger)
