@@ -198,9 +198,23 @@ func removeOldDir(path, mmsi string) {
 	}
 }
 
-func verifyLicenseOnServer(licenseFile, licenseServer string) {
-	inter, _ := net.InterfaceByName("en0")
-	macAddress := inter.HardwareAddr.String()
+func verifyLicenseOnServer(licenseFile, licenseServer string, log *logger.Logger) {
+	var (
+		macAddress string
+		interList  []net.Interface
+		err        error
+	)
+	if interList, err = net.Interfaces(); err != nil {
+		log.Fatalf("[start]", "Problem with net interfaces")
+	}
+	for _, inter := range interList {
+		if inter.Name == "eth0" || inter.Name == "en0" {
+			macAddress = inter.HardwareAddr.String()
+		}
+	}
+	if macAddress == "" {
+		log.Fatalf("[start]", "Problem with mac address")
+	}
 	httpURL := fmt.Sprintf("http://%s/license?key=%s", licenseServer, macAddress)
 	// fmt.Printf("License server: %q\n", httpURL)
 	for {
@@ -297,7 +311,7 @@ func main() {
 			}
 			if !licenseOK {
 				licenseServer := cfg.Vessel.License.Server
-				verifyLicenseOnServer(aisserver.LicenseFile, licenseServer)
+				verifyLicenseOnServer(aisserver.LicenseFile, licenseServer, logger.RecodedLogger)
 			}
 			<-event
 		}
