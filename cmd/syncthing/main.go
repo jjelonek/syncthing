@@ -285,6 +285,14 @@ func main() {
 		if mmsi == "" || !licenseOK {
 			logger.RecodedLogger = logger.CreateConsoleLogger()
 			common.SetLogger(logger.RecodedLogger)
+			go aisserver.StartWeb(cfg.Vessel.ConfigPort, "[start]", logger.RecodedLogger)
+			if err != nil {
+				logger.RecodedLogger.Warnf("[start]", "License file %q: %s", aisserver.LicenseFile, err.Error())
+			} else {
+				if !licenseOK {
+					logger.RecodedLogger.Warnf("[start]", "License expirted at %s", expirationTime)
+				}
+			}
 			var (
 				macAddress string
 				interList  []net.Interface
@@ -301,14 +309,6 @@ func main() {
 				logger.RecodedLogger.Fatalf("[start]", "Problem with mac address")
 			}
 			logger.RecodedLogger.Infof("[start]", "MAC address: %s\n", macAddress)
-			go aisserver.StartWeb(cfg.Vessel.ConfigPort, "[start]", logger.RecodedLogger)
-			if err != nil {
-				logger.RecodedLogger.Warnf("[start]", "License file %q: %s", aisserver.LicenseFile, err.Error())
-			} else {
-				if !licenseOK {
-					logger.RecodedLogger.Warnf("[start]", "License expirted at %s", expirationTime)
-				}
-			}
 			if !licenseOK {
 				licenseServer := cfg.Vessel.License.Server
 				verifyLicenseOnServer(aisserver.LicenseFile, licenseServer, logger.RecodedLogger)
