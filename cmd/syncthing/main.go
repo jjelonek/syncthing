@@ -271,8 +271,21 @@ func main() {
 		if mmsi == "" || !licenseOK {
 			logger.RecodedLogger = logger.CreateConsoleLogger()
 			common.SetLogger(logger.RecodedLogger)
-			inter, _ := net.InterfaceByName("en0")
-			macAddress := inter.HardwareAddr.String()
+			var (
+				macAddress string
+				interList  []net.Interface
+			)
+			if interList, err = net.Interfaces(); err != nil {
+				logger.RecodedLogger.Fatalf("[start]", "Problem with net interfaces")
+			}
+			for _, inter := range interList {
+				if inter.Name == "eth0" || inter.Name == "en0" {
+					macAddress = inter.HardwareAddr.String()
+				}
+			}
+			if macAddress == "" {
+				logger.RecodedLogger.Fatalf("[start]", "Problem with mac address")
+			}
 			logger.RecodedLogger.Infof("[start]", "MAC address: %s\n", macAddress)
 			go aisserver.StartWeb(cfg.Vessel.ConfigPort, "[start]", logger.RecodedLogger)
 			if err != nil {

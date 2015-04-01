@@ -1,14 +1,18 @@
 <vtrackerConfig>
     <vessel>
-        <mmsi>2</mmsi>
+        <mmsi>123456789</mmsi>
         <dir>vtracker-vessel</dir>
         <logInterval>4</logInterval>
-        <gpsTimeOnly>true</gpsTimeOnly>
+        <gpsTimeOnly>false</gpsTimeOnly>
         <configPort>50004</configPort>
-        <remoteAIS active="true">
+        <license>
+            <file>license.txt</file>
+            <server>vtracker.recoded.co:55555</server>
+        </license>
+        <remoteAIS active="false">
             <pingInterval>60</pingInterval>
         </remoteAIS>
-        <localAIS active="false">
+        <localAIS active="true">
             <webPort>50003</webPort>
             <token>db67813d9adfebeebc0232c2fb67ae638e310fd9</token>
         </localAIS>
